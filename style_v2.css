@@ -1,0 +1,290 @@
+/* style_v2.css - COMPARTIMENTI STAGNI DEFINITIVI */
+
+/* 1. BASE: Per i PC (Scorre, nessun blocco, nessun bordo batteria) */
+html, body {
+  display: flex;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  height: -webkit-fill-available;
+  background: #f7f9fc;
+  box-sizing: border-box;
+}
+
+#sidebar {
+  width: 280px; 
+  background: #fff;
+  border-right: 1px solid #ddd;
+  padding: 12px;
+  overflow-y: auto; 
+  box-sizing: border-box;
+  flex-shrink: 0;
+  height: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+#main {
+  flex: 1;
+  padding: 12px 12px 2px 12px;
+  overflow: auto; 
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: 100%;
+}
+
+.draggable-person { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+table { width: 100% !important; min-width: 800px; margin: 0 !important; border-collapse: collapse; table-layout: fixed; }
+
+th, td { border: 1px solid #ccc; padding: 0; box-sizing: border-box; vertical-align: top; background: #fff; }
+th { background: #f5f5f5; font-weight: 700; height: 40px; padding: 4px; }
+th:nth-child(1), td:nth-child(1) { width: 10%; }
+th:nth-child(n+2), td:nth-child(n+2) { width: 12.85%; }
+tr { border-bottom: 1px solid #ccc; }
+
+.cell {
+  width: 100%; height: 100%; min-height: 140px; background: #fff;
+  display: flex; flex-direction: row; flex-wrap: wrap; align-content: flex-start;
+  padding: 2px; padding-bottom: 20px; box-sizing: border-box; position: relative; 
+}
+
+/* =========================================
+   2. IPAD / TOUCH (La Gabbia Fissa e Fluida)
+   ========================================= */
+@media (hover: none) and (min-width: 601px) {
+  html, body { 
+    position: fixed !important; 
+    top: 0; left: 0; right: 0; bottom: 0;
+    width: 100%; height: 100%; 
+    overflow: hidden !important; 
+    overscroll-behavior: none; padding-top: 0 !important; 
+  }
+  #sidebar, #main { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); box-sizing: border-box; }
+  table { height: 100% !important; }
+  #main { overflow: hidden; padding-bottom: 15px; }
+  table { height: auto !important; flex: 1 1 auto; min-height: 0; }
+  #grid tr { height: 20%; } 
+  .cell { min-height: 0 !important; }
+}
+
+/* Tutti gli altri stili condivisi */
+.cell.drag-over { background-color: #e6f7ff; border: 2px dashed #1890ff; }
+.cell-counter { position: absolute; bottom: 2px; right: 4px; font-size: 11px; color: #999; font-weight: bold; pointer-events: none; background-color: rgba(255,255,255,0.9); padding: 0 4px; border-radius: 4px; }
+.placed { width: 50%; max-width: 50%; box-sizing: border-box; padding: 1px 3px; font-size: 10px; font-weight: 600; color: #333; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: grab; flex-shrink: 0; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; }
+.placed.in-dubbio { color: #000000 !important; }
+.placed.in-dubbio::after { content: " ?"; font-weight: bold; }
+.group-title { font-weight: 700; background: #f0f4ff; color: #1f4e9a; padding: 6px 8px; border-radius: 6px; margin-top: 10px; font-size: 14px; }
+.block { background: #fff; border: 1px solid #555; padding: 4px 8px; border-radius: 5px; margin: 4px 0; font-size: 11px; display: inline-block; cursor: grab; font-weight: 600; text-transform: uppercase; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; }
+.block.selected-for-placement { background: #2b8cff; color: #fff; transform: scale(1.05); }
+.shift-count { font-size: 0.9em; margin-left: 5px; opacity: 0.8; }
+.limit-reached { color: red; font-weight: bold; }
+.btn { background: #2b8cff; color: #fff; border: none; padding: 8px; border-radius: 5px; cursor: pointer; font-weight: 600; }
+.btn.secondary { background: #fff; color: #2b8cff; border: 1px solid #2b8cff; }
+
+/* MODALE AGGIORNATA PER LO SCORRIMENTO */
+.modal { display: none; position: fixed; z-index: 99999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+.modal.show { display: flex; }
+.modal-content { background-color: #fefefe; margin: auto; padding: 20px; border: 1px solid #888; width: 70%; max-width: 800px; border-radius: 8px; position: relative; max-height: 85vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.close-button { position: absolute; right: 15px; top: 10px; font-size: 28px; cursor: pointer; z-index: 10; }
+
+#staff-list-container ul { display: grid; grid-template-columns: 1fr 1fr; column-gap: 40px; row-gap: 0; padding: 0; list-style: none; margin-bottom: 20px; }
+#staff-list-container li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; text-transform: uppercase; font-size: 13px; }
+.staff-modal-section-title { margin-top: 15px; margin-bottom: 5px; padding-bottom: 2px; border-bottom: 1px solid #eee; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+#staff-form { margin-top: 15px; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
+#staff-form input[type="text"], #staff-form input[type="number"], #staff-form select { padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+.header-container { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 5px; margin-top: -10px; flex-shrink: 0; }
+.editable-title { width: 90%; border: none; background: transparent; font-size: 24px; font-weight: bold; text-align: center; color: #1f4e9a; padding: 5px; border-bottom: 2px dashed #ccc; outline: none; text-transform: uppercase; }
+.editable-title:focus { border-bottom: 2px solid #2b8cff; }
+
+/* VISTA TELEFONO GENERALE */
+#mobile-view {
+  display: none; width: 100%; flex-direction: column; gap: 15px; padding-bottom: 30px;
+  padding-top: max(20px, env(safe-area-inset-top)); padding-left: 10px; padding-right: 10px; box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  body { position: static !important; overflow: auto !important; height: auto !important; padding-top: 0 !important; }
+  #main { overflow: visible !important; }
+  
+  table, .header-container { display: none !important; }
+  #mobile-view { display: flex; }
+  
+  #sidebar { display: none !important; }
+  #sidebar.mobile-open { 
+    display: block !important; 
+    position: fixed; 
+    top: 0; left: 0; bottom: 0; /* Stop all'altezza, usiamo l'ancoraggio */
+    width: 280px; 
+    height: auto !important; /* Disattiva il 100% buggato */
+    z-index: 10000; 
+    box-shadow: 5px 0 15px rgba(0,0,0,0.5); 
+    background-color: #fff; 
+    padding-top: 40px; 
+    box-sizing: border-box; 
+    overflow-y: auto !important; 
+    -webkit-overflow-scrolling: touch; 
+  }
+  #sidebar.mobile-open h3, #sidebar.mobile-open #sidebar-content { display: none !important; }
+  #mobile-close-sidebar { display: block !important; position: absolute; top: 5px; right: 15px; }
+  
+  .mobile-day-selector { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 10px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+  #mobile-current-day { font-size: 18px; color: #1f4e9a; margin: 0; text-transform: uppercase; }
+  .mobile-shift-card { background: #fff; border-radius: 12px; padding: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); border-left: 5px solid #2b8cff; margin-bottom: 15px; }
+  .mobile-shift-title { font-size: 16px; font-weight: bold; color: #333; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+  .mobile-add-btn { background: #28a745; color: white; border: none; border-radius: 50%; width: 30px; height: 30px; font-size: 20px; line-height: 1; cursor: pointer; display: flex; justify-content: center; align-items: center; }
+  .mobile-person-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 15px; border-bottom: 1px dashed #f0f0f0; }
+
+  .modal { padding: 10px; box-sizing: border-box; }
+  .modal-content { width: 100% !important; padding: 15px !important; max-height: 85vh !important; overflow-y: auto !important; }
+  #staff-list-container ul { grid-template-columns: 1fr !important; column-gap: 0; }
+  #staff-form { flex-direction: column; align-items: stretch; }
+  #staff-form input, #staff-form select { width: 100% !important; box-sizing: border-box; margin-bottom: 5px; }
+}
+
+.placed.contratto-fisso { background-color: #e0e0e0 !important; color: #555 !important; border: 1px solid #bbb !important; }
+/* ===================================================================
+   3. CLASSE ESCLUSIVA PER LA PWA (STANDALONE SU TELEFONO)
+   Usiamo il fix Javascript --vh per sconfiggere il bug di iOS
+   =================================================================== */
+@media (display-mode: standalone) and (max-width: 600px), 
+       (display-mode: fullscreen) and (max-width: 600px) {
+  
+  html, body {
+    position: fixed !important; 
+    top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+    width: 100vw !important; 
+    
+    /* LA MAGIA: Usa i pixel esatti contati dal Javascript */
+    height: 100vh !important; /* Fallback di sicurezza */
+    height: calc(var(--vh, 1vh) * 100) !important; 
+    
+    overflow: hidden !important; 
+    overscroll-behavior: none !important;
+    padding: 0 !important; margin: 0 !important;
+  }
+
+  #main {
+    position: fixed !important;
+    top: 0; left: 0; right: 0; bottom: 0;
+    height: calc(var(--vh, 1vh) * 100) !important;
+    padding: 0 !important;
+  }
+
+  #mobile-view {
+    position: absolute !important;
+    top: 0; left: 0; right: 0; bottom: 0;
+    height: auto !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-top: max(20px, env(safe-area-inset-top)) !important;
+    padding-bottom: max(30px, env(safe-area-inset-bottom)) !important;
+  }
+
+  #sidebar.mobile-open {
+    padding-bottom: max(30px, env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* STAMPA E PDF */
+@media print {
+  @page { size: A4 landscape; margin: 0; }
+  body { margin: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; position: static !important; height: auto !important; }
+  #sidebar, #staff-modal, #ics-modal, .loader, .controls, #save-status, .date-picker-container, #sidebar.mobile-open, #mobile-view { display: none !important; }
+  #main { display: block !important; width: 1100px !important; height: 700px !important; padding: 10px !important; margin: 0 !important; overflow: hidden !important; }
+  .header-container { margin: 0 !important; height: 40px !important; flex-direction: row !important; justify-content: center !important; display: flex !important; }
+  .editable-title { border-bottom: none !important; font-size: 18px !important; padding: 5px !important; margin: 0 !important; }
+  table { display: table !important; width: 100% !important; height: 640px !important; min-width: 100% !important; margin: 0 0 10px 0 !important; table-layout: fixed !important; border-collapse: collapse !important; border-bottom: 2px solid #000 !important; }  
+  th, td { border: 1px solid #000 !important; }
+  th { height: 25px !important; padding: 2px !important; font-size: 11px !important; }
+  #grid tr { height: 118px !important; }
+  .cell { min-height: 0 !important; height: 100% !important; border: none !important; display: flex !important; flex-wrap: wrap !important; align-content: flex-start !important; padding: 2px !important; overflow: hidden !important; gap: 1px !important; }
+  .cell-counter { display: none !important; }
+  .placed { width: 49% !important; font-size: 8.5pt !important; letter-spacing: -0.2px !important; border: none !important; padding: 0 !important; margin-bottom: 0 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: clip !important; line-height: 1.2 !important; }
+}
+
+body.print-mode #sidebar, body.print-mode #staff-modal, body.print-mode #ics-modal, body.print-mode .loader, body.print-mode .controls, body.print-mode #save-status, body.print-mode .date-picker-container, body.print-mode #mobile-view, body.print-mode #notification-bell { display: none !important; }
+body.print-mode #main { display: block !important; width: 1100px !important; height: 700px !important; padding: 10px !important; margin: 0 !important; overflow: hidden !important; box-sizing: border-box !important; }
+body.print-mode .header-container { margin: 0 !important; height: 40px !important; flex-direction: row !important; justify-content: center !important; display: flex !important; }
+body.print-mode .editable-title { border-bottom: none !important; font-size: 18px !important; padding: 5px !important; margin: 0 !important; }
+body.print-mode table { display: table !important; width: 100% !important; height: 640px !important; min-width: 100% !important; margin: 0 0 10px 0 !important; table-layout: fixed !important; border-collapse: collapse !important; border-bottom: 2px solid #000 !important; }
+body.print-mode th, body.print-mode td { border: 1px solid #000 !important; }
+body.print-mode th { height: 25px !important; padding: 2px !important; font-size: 11px !important;}
+body.print-mode #grid tr { height: 118px !important; }
+body.print-mode .cell { min-height: 0 !important; height: 100% !important; border: none !important; display: flex !important; flex-wrap: wrap !important; align-content: flex-start !important; padding: 2px !important; overflow: hidden !important; gap: 1px !important; }
+body.print-mode .cell-counter { display: none !important; }
+body.print-mode .placed { width: 49% !important; font-size: 8.5pt !important; letter-spacing: -0.2px !important; border: none !important; padding: 0 !important; margin-bottom: 0 !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: clip !important; line-height: 1.2 !important; }
+
+/* BELL NOTIFICATION SYSTEM */
+#notification-bell {
+  position: fixed;
+  top: 15px;
+  right: 15px;
+  z-index: 1001;
+  cursor: pointer;
+  background: white;
+  border: 1.5px solid #e91e63;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(233, 30, 99, 0.2);
+  transition: all 0.2s ease-in-out;
+}
+#notification-bell:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 14px rgba(233, 30, 99, 0.3);
+}
+.bell-icon {
+  font-size: 20px;
+}
+.bell-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background-color: #f44336;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: bold;
+  border: 2px solid white;
+  min-width: 14px;
+  text-align: center;
+}
+@keyframes ring {
+  0% { transform: rotate(0); }
+  10% { transform: rotate(15deg); }
+  20% { transform: rotate(-15deg); }
+  30% { transform: rotate(10deg); }
+  40% { transform: rotate(-10deg); }
+  50% { transform: rotate(5deg); }
+  60% { transform: rotate(-5deg); }
+  100% { transform: rotate(0); }
+}
+.bell-ring {
+  display: inline-block;
+  animation: ring 1s ease-in-out infinite;
+}
+
+@media print {
+  #notification-bell { display: none !important; }
+}
+
+.toast { visibility: hidden; min-width: 200px; background-color: #323232; color: #fff; text-align: center; border-radius: 8px; padding: 12px 20px; position: fixed; z-index: 9999; left: 50%; bottom: 20px; transform: translateX(-50%); font-size: 14px; font-weight: 500; box-shadow: 0px 4px 10px rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.3s, bottom 0.3s; pointer-events: none; }
+.toast.show { visibility: visible; opacity: 1; bottom: 40px; }
+
+/* ONE COLUMN MODE TOGGLE */
+body.one-col-mode .placed,
+#main.one-col-mode .placed,
+body.print-mode.one-col-mode .placed,
+body.print-mode #main.one-col-mode .placed {
+    width: 100% !important;
+    max-width: 100% !important;
+}

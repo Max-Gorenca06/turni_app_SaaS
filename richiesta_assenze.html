@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Richiesta Assenze</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .container { background: #fff; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; box-sizing: border-box; }
+        h2 { color: #e91e63; margin-top: 0; text-align: center; }
+        p { font-size: 14px; color: #666; text-align: center; margin-bottom: 20px; }
+        label { font-size: 13px; font-weight: bold; color: #333; margin-top: 10px; display: block; }
+        select, input, textarea { width: 100%; padding: 10px; margin-top: 5px; border-radius: 6px; border: 1px solid #ccc; box-sizing: border-box; font-size: 15px; }
+        .btn { background: #e91e63; color: #fff; border: none; padding: 12px; width: 100%; border-radius: 6px; font-size: 16px; font-weight: bold; margin-top: 20px; cursor: pointer; transition: background 0.2s; }
+        .btn:active { background: #c2185b; }
+        #status-msg { text-align: center; font-weight: bold; margin-top: 15px; font-size: 14px; }
+        #error-screen { text-align: center; color: red; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="main-container">
+    <div id="error-screen">
+        <h2>Link non valido</h2>
+        <p>Manca il codice del ristorante. Richiedi il link corretto al tuo responsabile.</p>
+    </div>
+
+    <div id="form-content" style="display: none;">
+        <h2>Invia Richiesta</h2>
+        <p>Le richieste saranno valutate dalla direzione. Non sono effettive finché non vengono approvate.</p>
+
+        <label for="nome">Il tuo nome:</label>
+        <select id="nome" required>
+            <option value="" disabled selected>Caricamento in corso...</option>
+        </select>
+
+        <label for="data-inizio">Dal giorno:</label>
+        <input type="date" id="data-inizio" required>
+
+        <label for="data-fine">Al giorno (incluso):</label>
+        <input type="date" id="data-fine" required>
+
+        <label for="turno">Per quale turno?</label>
+        <select id="turno" required>
+            <option value="TUTTI">Tutto il giorno</option>
+        </select>
+
+        <label for="motivo">Motivo (Opzionale):</label>
+        <textarea id="motivo" rows="2" placeholder="Es. Esame universitario, visita medica..."></textarea>
+
+        <button id="submit-btn" class="btn">Invia Richiesta</button>
+        <div id="status-msg"></div>
+    </div>
+</div>
+
+<script>
+    // 1. LEGGE L'ID DEL RISTORANTE DALL'URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const aziendaId = urlParams.get('id');
+
+    if (!aziendaId) {
+        document.getElementById('error-screen').style.display = 'block';
+    } else {
+        document.getElementById('form-content').style.display = 'block';
+
+        const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co'; // <--- LE TUE CHIAVI VECCHIE (O SAAS SE LE HAI CAMBIATE)
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function caricaDati() {
+            // 2. IL FILTRO SAAS: Carica solo i nomi di QUESTA azienda
+            const { data: staffData } = await supabaseClient.from('staff').select('name').eq('azienda_id', aziendaId).order('name');
+            const selectNome = document.getElementById('nome');
+            selectNome.innerHTML = '<option value="" disabled selected>Scegli il tuo nome...</option>';
+            
+            if (staffData) {
+                staffData.forEach(p => { selectNome.innerHTML += `<option value="${p.name}">${p.name}</option>`; });
+            } else {
+                selectNome.innerHTML = '<option value="" disabled>Errore di connessione</option>';
+            }
+
+            // Carica le impostazioni dinamiche
+            const { data: configData } = await supabaseClient
+                .from('griglie_turni')
+                .select('dati_griglia')
+                .eq('azienda_id', aziendaId)
+                .eq('data_lunedi', '1970-01-01')
+                .single();
+
+            const selectTurno = document.getElementById('turno');
+            if (configData && configData.dati_griglia) {
+                const config = typeof configData.dati_griglia === 'string' ? JSON.parse(configData.dati_griglia) : configData.dati_griglia;
+                if (config.turni) {
+                    config.turni.forEach(turno => {
+                        const val = turno.toLowerCase().replace(/\s+/g, "_");
+                        selectTurno.innerHTML += `<option value="${val}">Solo ${turno}</option>`;
+                    });
+                }
+            } else {
+                // Default fallback
+                selectTurno.innerHTML += `
+                    <option value="camere">Solo Camere</option>
+                    <option value="cucina_pranzo">Solo Cucina Pranzo</option>
+                    <option value="sala_pranzo">Solo Sala Pranzo</option>
+                    <option value="cucina_cena">Solo Cucina Cena</option>
+                    <option value="sala_cena">Solo Sala Cena</option>
+                `;
+            }
+        }
+
+        document.getElementById('submit-btn').addEventListener('click', async () => {
+            const nome = document.getElementById('nome').value;
+            const dataInizio = document.getElementById('data-inizio').value;
+            const dataFine = document.getElementById('data-fine').value;
+            const turno = document.getElementById('turno').value;
+            const motivo = document.getElementById('motivo').value.trim();
+            const msgDiv = document.getElementById('status-msg');
+
+            if (!nome || !dataInizio || !dataFine) { msgDiv.style.color = "red"; msgDiv.textContent = "Compila tutti i campi."; return; }
+            if (new Date(dataFine) < new Date(dataInizio)) { msgDiv.style.color = "red"; msgDiv.textContent = "Date non valide."; return; }
+
+            msgDiv.style.color = "#666"; msgDiv.textContent = "Invio in corso...";
+            document.getElementById('submit-btn').disabled = true;
+
+            // 3. INSERIMENTO CON IL LUCCHETTO SAAS
+            const { error } = await supabaseClient.from('assenze_globali').insert([{
+                azienda_id: aziendaId,
+                nome_dipendente: nome,
+                data_inizio: dataInizio,
+                data_fine: dataFine,
+                turno_specifico: turno,
+                motivo: motivo,
+                stato: 'IN ATTESA' 
+            }]);
+
+            document.getElementById('submit-btn').disabled = false;
+
+            if (error) {
+                msgDiv.style.color = "red"; msgDiv.textContent = "Errore di connessione. Riprova."; console.error(error);
+            } else {
+                msgDiv.style.color = "green"; msgDiv.textContent = "✅ Richiesta inviata con successo! Puoi chiudere.";
+                document.getElementById('data-inizio').value = ''; document.getElementById('data-fine').value = ''; document.getElementById('motivo').value = '';
+            }
+        });
+
+        caricaDati();
+    }
+</script>
+</body>
+</html>
