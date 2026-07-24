@@ -335,7 +335,10 @@ Sala"></textarea>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
           <!-- Chi è a lavoro adesso -->
           <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-              <h3 style="margin-top: 0; font-size: 16px; color: #0f172a; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 15px;">🟢 Attualmente a lavoro</h3>
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; margin-bottom: 15px;">
+                  <h3 style="margin: 0; font-size: 16px; color: #0f172a;">🟢 Attualmente a lavoro</h3>
+                  <button id="btn-refresh-timbrature" style="background: none; border: none; cursor: pointer; color: #3b82f6; font-size: 18px;" title="Aggiorna">🔄</button>
+              </div>
               <div id="timbrature-active-list" style="font-size: 14px; color: #475569; min-height: 50px;">
                   Caricamento in corso...
               </div>

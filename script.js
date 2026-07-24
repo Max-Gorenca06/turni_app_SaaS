@@ -2187,9 +2187,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const now = new Date();
             document.getElementById('report-month').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
             timbratoreModal.style.display = 'flex';
+            if (!window.timbratoreInterval) {
+                window.timbratoreInterval = setInterval(() => {
+                    if (timbratoreModal.style.display === 'flex') {
+                        caricaTimbratureDashboard();
+                    }
+                }, 10000);
+            }
             caricaTimbratureDashboard();
         });
-        document.getElementById('close-timbratore-modal')?.addEventListener('click', () => { timbratoreModal.style.display = 'none'; });
+        document.getElementById('close-timbratore-modal')?.addEventListener('click', () => { 
+            timbratoreModal.style.display = 'none'; 
+            if (window.timbratoreInterval) {
+                clearInterval(window.timbratoreInterval);
+                window.timbratoreInterval = null;
+            }
+        });
         document.getElementById('copy-timbratore-link')?.addEventListener('click', () => {
             const copyText = document.getElementById('timbratore-link-input');
             copyText.select();
@@ -2197,6 +2210,9 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Link copiato!');
         });
         document.getElementById('btn-generate-report')?.addEventListener('click', generaReportTimbrature);
+        document.getElementById('btn-refresh-timbrature')?.addEventListener('click', () => {
+            caricaTimbratureDashboard();
+        });
 
         document.getElementById('settingsBtn')?.addEventListener('click', async () => {
             if(!currentAziendaId) return;
