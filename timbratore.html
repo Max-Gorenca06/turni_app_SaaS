@@ -56,6 +56,12 @@
     </div>
 
     <script>
+        window.addEventListener('error', function(e) {
+            document.body.innerHTML += '<div style="color:red; padding: 20px;">Error: ' + e.message + '</div>';
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+            document.body.innerHTML += '<div style="color:red; padding: 20px;">Promise Error: ' + (e.reason && e.reason.message ? e.reason.message : e.reason) + '</div>';
+        });
         const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);

@@ -2323,137 +2323,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    init();
-});
-
-// Stubs for mobile view functions to prevent reference errors
-window.renderMobileView = function() {};
-window.updateMobileHeader = function() {};
-function renderMobileView() {}
-function updateMobileHeader() {}
-
-
-    async function caricaStatisticheGlobali() {
-        const statsContainer = document.getElementById('global-stats-content');
-        if (!statsContainer) return;
-        
-        statsContainer.innerHTML = '<div style="font-size:14px; color:#666; text-align: center; padding: 40px;">Caricamento statistiche...</div>';
-        
-        try {
-            const { data: griglie } = await window.supabaseClient.from('griglie_turni').select('*');
-            
-            let totaleTurniAttivi = 0;
-            let attivitaConTurni = new Set();
-            let conteggioPersone = {};
-            let repartiStats = {};
-            
-            if (griglie) {
-                griglie.forEach(g => {
-                    if (g.dati_griglia && g.data_lunedi && !g.data_lunedi.startsWith('1970')) {
-                        attivitaConTurni.add(g.azienda_id);
-                        Object.entries(g.dati_griglia).forEach(([key, arr]) => {
-                            if (!key.startsWith('_metadata') && Array.isArray(arr)) {
-                                totaleTurniAttivi += arr.length;
-                                // Simple extraction of turno name from cellId (e.g., "Lunedì-camere")
-                                const parts = key.split('-');
-                                const turnoName = parts.length > 1 ? parts.slice(1).join('-') : 'altro';
-                                
-                                arr.forEach(p => {
-                                    const n = p.name.trim().toUpperCase();
-                                    conteggioPersone[n] = (conteggioPersone[n] || 0) + 1;
-                                    repartiStats[turnoName] = (repartiStats[turnoName] || 0) + 1;
-                                });
-                            }
-                        });
-                    }
-                });
-            }
-            
-            const personeArray = Object.entries(conteggioPersone).sort((a,b) => b[1] - a[1]);
-            const copertiPercent = (window._lastAziendeList && window._lastAziendeList.length > 0) ? Math.round((attivitaConTurni.size / window._lastAziendeList.length) * 100) : 0;
-            const aziendeTotali = window._lastAziendeList ? window._lastAziendeList.length : 0;
-            
-            // Generate Pie Chart (Conic Gradient) with hover tooltips
-            let pieGradient = '';
-            let cumulativePercent = 0;
-            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#eab308', '#06b6d4', '#a855f7'];
-            
-            let hoverZones = '';
-            
-            if (totaleTurniAttivi > 0) {
-                let i = 0;
-                for (const [nome, count] of personeArray) {
-                    const percent = (count / totaleTurniAttivi) * 100;
-                    const color = colors[i % colors.length];
-                    
-                    pieGradient += `${color} ${cumulativePercent}% ${cumulativePercent + percent}%, `;
-                    
-                    // Create invisible absolute positioned slices for hover
-                    // (A simple approach is generating a tooltip container and showing info on mousemove, but CSS conic-gradient tooltips are tricky. 
-                    // Let's just create a list below the pie, and use standard chart. Since standard chart needs library, we'll build a neat visual list next to it instead of left, or we can use custom tooltip on hover on list items.
-                    // Actually, user wants "quando passi il mouse esce nome e percentuale". A simpler approach without external lib is a custom D3 or Recharts, but we can't easily add them here without breaking. 
-                    // So let's just make the pie chart and a nice grid of cards, maybe skip hover on SVG and use flex items that expand on hover.)
-                    
-                    cumulativePercent += percent;
-                    i++;
-                }
-                pieGradient = pieGradient.slice(0, -2); // remove last comma
-            } else {
-                pieGradient = '#e2e8f0 0% 100%';
-            }
-
-            let staffListHtml = '';
-            personeArray.forEach(([nome, count], idx) => {
-                const percent = totaleTurniAttivi > 0 ? Math.round((count / totaleTurniAttivi) * 100) : 0;
-                const color = colors[idx % colors.length];
-                staffListHtml += `
-                    <div title="${nome}: ${percent}% (${count} turni)" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 15px; background: #f8fafc; border-radius: 8px; border-left: 4px solid ${color}; transition: all 0.2s; cursor: default;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f8fafc'">
-                        <div style="font-weight: 500; color: #334155; font-size: 14px;">${nome}</div>
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <div style="font-size: 13px; color: #64748b;">${count} turni</div>
-                            <div style="font-size: 14px; font-weight: 600; color: ${color}; width: 40px; text-align: right;">${percent}%</div>
-                        </div>
-                    </div>
-                `;
-            });
-
-            statsContainer.innerHTML = `
-                <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 30px;">
-                    <div style="flex: 1; min-width: 200px; background: #f0f9ff; padding: 25px; border-radius: 12px; border: 1px solid #bae6fd;">
-                        <div style="font-size: 14px; color: #0284c7; margin-bottom: 5px; font-weight: 600; text-transform: uppercase;">Attività Pianificate</div>
-                        <div style="display: flex; align-items: baseline; gap: 10px;">
-                            <div style="font-size: 36px; font-weight: 700; color: #0369a1;">${copertiPercent}%</div>
-                            <div style="font-size: 14px; color: #0284c7;">(${attivitaConTurni.size} su ${aziendeTotali})</div>
-                        </div>
-                    </div>
-                    
-                    <div style="flex: 1; min-width: 200px; background: #ecfdf5; padding: 25px; border-radius: 12px; border: 1px solid #a7f3d0;">
-                        <div style="font-size: 14px; color: #059669; margin-bottom: 5px; font-weight: 600; text-transform: uppercase;">Turni Assegnati Globali</div>
-                        <div style="font-size: 36px; font-weight: 700; color: #047857;">${totaleTurniAttivi}</div>
-                        <div style="font-size: 13px; color: #059669; margin-top: 5px;">Somma di tutti i presidi attuali</div>
-                    </div>
-                </div>
-                
-                <h3 style="color: #1e293b; margin-bottom: 20px; font-size: 18px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Dettaglio Personale</h3>
-                
-                <div style="display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap;">
-                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); border: 1px solid #f1f5f9;">
-                        <div style="font-size: 15px; font-weight: 600; color: #475569;">Distribuzione Turni</div>
-                        <div style="width: 200px; height: 200px; border-radius: 50%; background: conic-gradient(${pieGradient}); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05);"></div>
-                        <div style="font-size: 12px; color: #94a3b8;">Passa il mouse sulla lista per i dettagli</div>
-                    </div>
-                    
-                    <div style="flex: 1; min-width: 300px; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; max-height: 350px; overflow-y: auto; padding-right: 10px;">
-                        ${staffListHtml || '<div style="color:#64748b;">Nessun turno assegnato.</div>'}
-                    </div>
-                </div>
-            `;
-        } catch(e) {
-            console.error(e);
-            statsContainer.innerHTML = '<div style="font-size:14px; color:red; text-align:center; padding: 20px;">Errore: ' + e.message + '</div>';
-        }
-    }
-
     async function caricaTimbratureDashboard() {
         if (!currentAziendaId) return;
         
@@ -2607,6 +2476,137 @@ function updateMobileHeader() {}
         } catch(e) {
             console.error(e);
             alert("Errore generazione report: " + e.message);
+        }
+    }
+
+    init();
+});
+
+// Stubs for mobile view functions to prevent reference errors
+window.renderMobileView = function() {};
+window.updateMobileHeader = function() {};
+function renderMobileView() {}
+function updateMobileHeader() {}
+
+
+    async function caricaStatisticheGlobali() {
+        const statsContainer = document.getElementById('global-stats-content');
+        if (!statsContainer) return;
+        
+        statsContainer.innerHTML = '<div style="font-size:14px; color:#666; text-align: center; padding: 40px;">Caricamento statistiche...</div>';
+        
+        try {
+            const { data: griglie } = await window.supabaseClient.from('griglie_turni').select('*');
+            
+            let totaleTurniAttivi = 0;
+            let attivitaConTurni = new Set();
+            let conteggioPersone = {};
+            let repartiStats = {};
+            
+            if (griglie) {
+                griglie.forEach(g => {
+                    if (g.dati_griglia && g.data_lunedi && !g.data_lunedi.startsWith('1970')) {
+                        attivitaConTurni.add(g.azienda_id);
+                        Object.entries(g.dati_griglia).forEach(([key, arr]) => {
+                            if (!key.startsWith('_metadata') && Array.isArray(arr)) {
+                                totaleTurniAttivi += arr.length;
+                                // Simple extraction of turno name from cellId (e.g., "Lunedì-camere")
+                                const parts = key.split('-');
+                                const turnoName = parts.length > 1 ? parts.slice(1).join('-') : 'altro';
+                                
+                                arr.forEach(p => {
+                                    const n = p.name.trim().toUpperCase();
+                                    conteggioPersone[n] = (conteggioPersone[n] || 0) + 1;
+                                    repartiStats[turnoName] = (repartiStats[turnoName] || 0) + 1;
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+            
+            const personeArray = Object.entries(conteggioPersone).sort((a,b) => b[1] - a[1]);
+            const copertiPercent = (window._lastAziendeList && window._lastAziendeList.length > 0) ? Math.round((attivitaConTurni.size / window._lastAziendeList.length) * 100) : 0;
+            const aziendeTotali = window._lastAziendeList ? window._lastAziendeList.length : 0;
+            
+            // Generate Pie Chart (Conic Gradient) with hover tooltips
+            let pieGradient = '';
+            let cumulativePercent = 0;
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#eab308', '#06b6d4', '#a855f7'];
+            
+            let hoverZones = '';
+            
+            if (totaleTurniAttivi > 0) {
+                let i = 0;
+                for (const [nome, count] of personeArray) {
+                    const percent = (count / totaleTurniAttivi) * 100;
+                    const color = colors[i % colors.length];
+                    
+                    pieGradient += `${color} ${cumulativePercent}% ${cumulativePercent + percent}%, `;
+                    
+                    // Create invisible absolute positioned slices for hover
+                    // (A simple approach is generating a tooltip container and showing info on mousemove, but CSS conic-gradient tooltips are tricky. 
+                    // Let's just create a list below the pie, and use standard chart. Since standard chart needs library, we'll build a neat visual list next to it instead of left, or we can use custom tooltip on hover on list items.
+                    // Actually, user wants "quando passi il mouse esce nome e percentuale". A simpler approach without external lib is a custom D3 or Recharts, but we can't easily add them here without breaking. 
+                    // So let's just make the pie chart and a nice grid of cards, maybe skip hover on SVG and use flex items that expand on hover.)
+                    
+                    cumulativePercent += percent;
+                    i++;
+                }
+                pieGradient = pieGradient.slice(0, -2); // remove last comma
+            } else {
+                pieGradient = '#e2e8f0 0% 100%';
+            }
+
+            let staffListHtml = '';
+            personeArray.forEach(([nome, count], idx) => {
+                const percent = totaleTurniAttivi > 0 ? Math.round((count / totaleTurniAttivi) * 100) : 0;
+                const color = colors[idx % colors.length];
+                staffListHtml += `
+                    <div title="${nome}: ${percent}% (${count} turni)" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 15px; background: #f8fafc; border-radius: 8px; border-left: 4px solid ${color}; transition: all 0.2s; cursor: default;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f8fafc'">
+                        <div style="font-weight: 500; color: #334155; font-size: 14px;">${nome}</div>
+                        <div style="display: flex; align-items: center; gap: 15px;">
+                            <div style="font-size: 13px; color: #64748b;">${count} turni</div>
+                            <div style="font-size: 14px; font-weight: 600; color: ${color}; width: 40px; text-align: right;">${percent}%</div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            statsContainer.innerHTML = `
+                <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 30px;">
+                    <div style="flex: 1; min-width: 200px; background: #f0f9ff; padding: 25px; border-radius: 12px; border: 1px solid #bae6fd;">
+                        <div style="font-size: 14px; color: #0284c7; margin-bottom: 5px; font-weight: 600; text-transform: uppercase;">Attività Pianificate</div>
+                        <div style="display: flex; align-items: baseline; gap: 10px;">
+                            <div style="font-size: 36px; font-weight: 700; color: #0369a1;">${copertiPercent}%</div>
+                            <div style="font-size: 14px; color: #0284c7;">(${attivitaConTurni.size} su ${aziendeTotali})</div>
+                        </div>
+                    </div>
+                    
+                    <div style="flex: 1; min-width: 200px; background: #ecfdf5; padding: 25px; border-radius: 12px; border: 1px solid #a7f3d0;">
+                        <div style="font-size: 14px; color: #059669; margin-bottom: 5px; font-weight: 600; text-transform: uppercase;">Turni Assegnati Globali</div>
+                        <div style="font-size: 36px; font-weight: 700; color: #047857;">${totaleTurniAttivi}</div>
+                        <div style="font-size: 13px; color: #059669; margin-top: 5px;">Somma di tutti i presidi attuali</div>
+                    </div>
+                </div>
+                
+                <h3 style="color: #1e293b; margin-bottom: 20px; font-size: 18px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Dettaglio Personale</h3>
+                
+                <div style="display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap;">
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); border: 1px solid #f1f5f9;">
+                        <div style="font-size: 15px; font-weight: 600; color: #475569;">Distribuzione Turni</div>
+                        <div style="width: 200px; height: 200px; border-radius: 50%; background: conic-gradient(${pieGradient}); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05);"></div>
+                        <div style="font-size: 12px; color: #94a3b8;">Passa il mouse sulla lista per i dettagli</div>
+                    </div>
+                    
+                    <div style="flex: 1; min-width: 300px; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; max-height: 350px; overflow-y: auto; padding-right: 10px;">
+                        ${staffListHtml || '<div style="color:#64748b;">Nessun turno assegnato.</div>'}
+                    </div>
+                </div>
+            `;
+        } catch(e) {
+            console.error(e);
+            statsContainer.innerHTML = '<div style="font-size:14px; color:red; text-align:center; padding: 20px;">Errore: ' + e.message + '</div>';
         }
     }
 
