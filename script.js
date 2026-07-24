@@ -474,6 +474,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(btnReset) btnReset.style.display = isLoggedIn ? 'inline-block' : 'none';
         if(btnManageStaff) btnManageStaff.style.display = isLoggedIn ? 'inline-block' : 'none';
         if(btnPublish) btnPublish.style.display = 'inline-block';
+        if(btnSettings) btnSettings.style.display = isLoggedIn ? 'inline-block' : 'none';
         if(btnImportCsv) btnImportCsv.style.display = isLoggedIn ? 'inline-block' : 'none';
         if(btnSettings) {
             btnSettings.style.display = isLoggedIn ? 'inline-block' : 'none';
@@ -2173,6 +2174,67 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         document.getElementById('btn-logout')?.addEventListener('click', effettuaLogout);
+        document.getElementById('btn-support')?.addEventListener('click', () => {
+            alert("Il tuo piano include Assistenza Priority.\n\n📞 WhatsApp Dedicato: +39 333 1234567\n✉️ Email Priority: vip@turnicloud.pro\n\nSiamo attivi quasi 24/7. Scrivici in qualsiasi momento!");
+        });
+
+        const settingsModal = document.getElementById('settings-modal');
+        const timbratoreModal = document.getElementById('timbratore-modal');
+        document.getElementById('timbratoreBtn')?.addEventListener('click', () => {
+            if(!currentAziendaId) return;
+            document.getElementById('timbratore-link-input').value = window.location.origin + '/timbratore?id=' + currentAziendaId;
+            // Set current month to input
+            const now = new Date();
+            document.getElementById('report-month').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+            timbratoreModal.style.display = 'flex';
+            caricaTimbratureDashboard();
+        });
+        document.getElementById('close-timbratore-modal')?.addEventListener('click', () => { timbratoreModal.style.display = 'none'; });
+        document.getElementById('copy-timbratore-link')?.addEventListener('click', () => {
+            const copyText = document.getElementById('timbratore-link-input');
+            copyText.select();
+            document.execCommand('copy');
+            alert('Link copiato!');
+        });
+        document.getElementById('btn-generate-report')?.addEventListener('click', generaReportTimbrature);
+
+        document.getElementById('settingsBtn')?.addEventListener('click', async () => {
+            if(!currentAziendaId) return;
+            // Load current name
+            try {
+                const { data } = await window.supabaseClient.from('aziende').select('nome_ristorante').eq('id', currentAziendaId).single();
+                if (data) document.getElementById('settings-nome-azienda').value = data.nome_ristorante;
+            } catch(e){}
+            settingsModal.style.display = 'flex';
+        });
+        document.getElementById('close-settings-modal')?.addEventListener('click', () => { settingsModal.style.display = 'none'; });
+        document.getElementById('btn-save-settings')?.addEventListener('click', async () => {
+            const newName = document.getElementById('settings-nome-azienda').value.trim();
+            if(!newName) return;
+            try {
+                const { error } = await window.supabaseClient.from('aziende').update({ nome_ristorante: newName }).eq('id', currentAziendaId);
+                if(error) throw error;
+                alert('Attività aggiornata!');
+                settingsModal.style.display = 'none';
+                controllaStatoLogin(); // Reload dashboard
+            } catch(e) {
+                alert('Errore: ' + e.message);
+            }
+        });
+        document.getElementById('btn-delete-azienda')?.addEventListener('click', async () => {
+            if(!confirm('SEI SICURO? Tutti i turni e i dipendenti di questa attività verranno eliminati. Questa azione è irreversibile.')) return;
+            try {
+                const { error } = await window.supabaseClient.from('aziende').delete().eq('id', currentAziendaId);
+                if(error) throw error;
+                alert('Attività eliminata con successo.');
+                settingsModal.style.display = 'none';
+                currentAziendaId = null;
+                controllaStatoLogin();
+            } catch(e) {
+                alert('Errore: ' + e.message);
+            }
+        });
+
         
         
         document.getElementById('copyPrevBtn')?.addEventListener('click', async () => {
@@ -2271,7 +2333,7 @@ function updateMobileHeader() {}
             
             if (griglie) {
                 griglie.forEach(g => {
-                    if (g.dati_griglia && !g.data_lunedi.startsWith('1970')) {
+                    if (g.dati_griglia && g.data_lunedi && !g.data_lunedi.startsWith('1970')) {
                         attivitaConTurni.add(g.azienda_id);
                         Object.entries(g.dati_griglia).forEach(([key, arr]) => {
                             if (!key.startsWith('_metadata') && Array.isArray(arr)) {
@@ -2372,6 +2434,163 @@ function updateMobileHeader() {}
             `;
         } catch(e) {
             console.error(e);
-            statsContainer.innerHTML = '<div style="font-size:14px; color:red; text-align:center; padding: 20px;">Errore caricamento statistiche.</div>';
+            statsContainer.innerHTML = '<div style="font-size:14px; color:red; text-align:center; padding: 20px;">Errore: ' + e.message + '</div>';
         }
     }
+
+    async function caricaTimbratureDashboard() {
+        if (!currentAziendaId) return;
+        
+        try {
+            const { data, error } = await supabaseClient
+                .from('timbrature')
+                .select('*')
+                .eq('azienda_id', currentAziendaId)
+                .order('ingresso', { ascending: false })
+                .limit(50);
+                
+            if (error) {
+                // se non c'è la tabella
+                document.getElementById('timbrature-active-list').innerHTML = `<span style="color:red">Tabella timbrature non trovata. Segui le istruzioni per crearla.</span>`;
+                return;
+            }
+            
+            let htmlActive = '';
+            let htmlHistory = '';
+            
+            if (!data || data.length === 0) {
+                document.getElementById('timbrature-active-list').innerHTML = 'Nessun dipendente attualmente a lavoro.';
+                document.getElementById('timbrature-history-body').innerHTML = '<tr><td colspan="5" style="padding:10px;text-align:center;">Nessuna timbratura.</td></tr>';
+                return;
+            }
+            
+            // Trova gli attivi (che non hanno uscita)
+            const active = data.filter(t => !t.uscita);
+            if (active.length > 0) {
+                active.forEach(t => {
+                    const ing = new Date(t.ingresso);
+                    htmlActive += `<div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
+                        <span style="font-weight: 600;">👤 ${t.nome_dipendente}</span>
+                        <span style="color: #64748b;">Entrato alle ${ing.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}</span>
+                    </div>`;
+                });
+            } else {
+                htmlActive = '<div style="color: #64748b; padding: 10px 0;">Nessun dipendente attualmente a lavoro.</div>';
+            }
+            document.getElementById('timbrature-active-list').innerHTML = htmlActive;
+            
+            // Mostra history
+            data.forEach(t => {
+                const d = new Date(t.ingresso);
+                const dataStr = d.toLocaleDateString('it-IT');
+                const ingStr = d.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+                let uscStr = "-";
+                let oreTot = "-";
+                if (t.uscita) {
+                    const u = new Date(t.uscita);
+                    uscStr = u.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
+                    const diffMs = u - d;
+                    const diffHrs = diffMs / (1000 * 60 * 60);
+                    oreTot = diffHrs.toFixed(2) + " h";
+                }
+                
+                htmlHistory += `<tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 10px; font-weight: 500;">${t.nome_dipendente}</td>
+                    <td style="padding: 10px; color: #64748b;">${dataStr}</td>
+                    <td style="padding: 10px; color: #10b981; font-weight: bold;">${ingStr}</td>
+                    <td style="padding: 10px; color: ${t.uscita ? '#ef4444' : '#94a3b8'}; font-weight: bold;">${uscStr}</td>
+                    <td style="padding: 10px; font-weight: 600;">${oreTot}</td>
+                </tr>`;
+            });
+            
+            document.getElementById('timbrature-history-body').innerHTML = htmlHistory;
+            
+        } catch(e) {
+            console.error(e);
+        }
+    }
+
+    async function generaReportTimbrature() {
+        const monthStr = document.getElementById('report-month').value;
+        if (!monthStr || !currentAziendaId) return;
+        
+        const [year, month] = monthStr.split('-');
+        
+        // Start date
+        const startDate = new Date(year, month - 1, 1).toISOString();
+        // End date (first day of next month)
+        const endDate = new Date(year, month, 1).toISOString();
+        
+        alert("Generazione report in corso per " + monthStr + "... Attendere.");
+        
+        try {
+            const { data, error } = await supabaseClient
+                .from('timbrature')
+                .select('*')
+                .eq('azienda_id', currentAziendaId)
+                .gte('ingresso', startDate)
+                .lt('ingresso', endDate)
+                .order('nome_dipendente');
+                
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                alert("Nessuna timbratura trovata per questo mese.");
+                return;
+            }
+            
+            // We need to fetch staff cost to calculate costs
+            const { data: staffData } = await supabaseClient.from('staff').select('*').eq('azienda_id', currentAziendaId);
+            const staffMap = {};
+            if (staffData) {
+                staffData.forEach(s => staffMap[s.name] = s);
+            }
+            
+            // Raggruppa per dipendente
+            const report = {};
+            data.forEach(t => {
+                if (!t.uscita) return; // skip se non è uscito
+                
+                if (!report[t.nome_dipendente]) report[t.nome_dipendente] = { ore: 0, costo: 0 };
+                
+                const dIng = new Date(t.ingresso);
+                const dUsc = new Date(t.uscita);
+                const diffHrs = (dUsc - dIng) / (1000 * 60 * 60);
+                
+                report[t.nome_dipendente].ore += diffHrs;
+            });
+            
+            let csvContent = "Dipendente,Ore Totali,Costo Orario (€),Costo Totale Stimato (€)\n";
+            let totalCostoAzienda = 0;
+            
+            for (const nome in report) {
+                const ore = report[nome].ore;
+                let costoOrario = 0;
+                
+                if (staffMap[nome] && staffMap[nome].costo_orario) {
+                    costoOrario = parseFloat(staffMap[nome].costo_orario) || 0;
+                } else if (staffMap[nome] && staffMap[nome].costo) {
+                    costoOrario = parseFloat(staffMap[nome].costo) || 0;
+                }
+                
+                const costoTot = ore * costoOrario;
+                totalCostoAzienda += costoTot;
+                
+                csvContent += `${nome},${ore.toFixed(2)},${costoOrario.toFixed(2)},${costoTot.toFixed(2)}\n`;
+            }
+            
+            csvContent += `\nTOTALE AZIENDA,,,$${totalCostoAzienda.toFixed(2)}\n`;
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Report_Presenze_${monthStr}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+        } catch(e) {
+            console.error(e);
+            alert("Errore generazione report: " + e.message);
+        }
+    }
+

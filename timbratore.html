@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Timbratore Digitale</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; color: white; flex-direction: column; }
+        .container { background: #1e293b; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 100%; max-width: 400px; box-sizing: border-box; text-align: center; border: 1px solid #334155; }
+        h1 { color: #f8fafc; margin-top: 0; font-size: 24px; margin-bottom: 5px; }
+        p { color: #94a3b8; font-size: 14px; margin-bottom: 25px; }
+        .clock { font-size: 48px; font-weight: 800; color: #3b82f6; margin-bottom: 30px; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
+        select { width: 100%; padding: 15px; border-radius: 12px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 16px; margin-bottom: 30px; outline: none; appearance: none; text-align: center; font-weight: 600; }
+        
+        .swipe-area { position: relative; width: 100%; height: 60px; background: #334155; border-radius: 30px; overflow: hidden; display: none; }
+        .swipe-text { position: absolute; width: 100%; text-align: center; line-height: 60px; color: #94a3b8; font-weight: 600; font-size: 15px; user-select: none; z-index: 1; transition: opacity 0.3s; }
+        .swipe-button { position: absolute; left: 5px; top: 5px; width: 50px; height: 50px; background: #3b82f6; border-radius: 25px; z-index: 2; display: flex; justify-content: center; align-items: center; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: transform 0.1s; }
+        .swipe-button::after { content: '➔'; color: white; font-size: 20px; }
+        
+        .swipe-area.out-mode { background: #451a1a; }
+        .swipe-area.out-mode .swipe-button { background: #ef4444; }
+        
+        #error-screen { text-align: center; color: #ef4444; display: none; }
+        #status-msg { margin-top: 20px; font-size: 14px; font-weight: 600; min-height: 20px; }
+        
+        .spinner { border: 3px solid rgba(255,255,255,0.1); width: 24px; height: 24px; border-radius: 50%; border-left-color: #3b82f6; animation: spin 1s linear infinite; margin: 0 auto; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="error-screen">
+        <h2>Link non valido</h2>
+        <p>Manca il codice del ristorante. Richiedi il link corretto al tuo responsabile.</p>
+    </div>
+
+    <div class="container" id="main-container" style="display: none;">
+        <div style="width: 50px; height: 50px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-size: 24px; margin: 0 auto 15px;">⏱️</div>
+        <h1>Timbratore Digitale</h1>
+        <p>Seleziona il tuo nome e scorri per timbrare.</p>
+        
+        <div class="clock" id="clock">00:00</div>
+        
+        <select id="staff-select">
+            <option value="" disabled selected>Caricamento dipendenti...</option>
+        </select>
+        
+        <div class="spinner" id="loading-state"></div>
+
+        <div class="swipe-area" id="swipe-area">
+            <div class="swipe-text" id="swipe-text">Scorri per Entrare</div>
+            <div class="swipe-button" id="swipe-button"></div>
+        </div>
+        
+        <div id="status-msg"></div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const aziendaId = urlParams.get('id');
+        
+        const clockEl = document.getElementById('clock');
+        const staffSelect = document.getElementById('staff-select');
+        const swipeArea = document.getElementById('swipe-area');
+        const swipeButton = document.getElementById('swipe-button');
+        const swipeText = document.getElementById('swipe-text');
+        const statusMsg = document.getElementById('status-msg');
+        const loadingState = document.getElementById('loading-state');
+        
+        let currentStatus = null; // 'in' or 'out'
+        let lastRecordId = null;
+        
+        // Orologio in tempo reale
+        setInterval(() => {
+            const now = new Date();
+            clockEl.textContent = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        }, 1000);
+        
+        if (!aziendaId) {
+            document.getElementById('error-screen').style.display = 'block';
+        } else {
+            document.getElementById('main-container').style.display = 'block';
+            loadStaff();
+        }
+        
+        async function loadStaff() {
+            const { data, error } = await supabase.from('staff').select('name').eq('azienda_id', aziendaId).order('name');
+            if (error || !data) {
+                staffSelect.innerHTML = '<option value="" disabled>Errore caricamento</option>';
+                return;
+            }
+            staffSelect.innerHTML = '<option value="" disabled selected>Seleziona il tuo nome...</option>';
+            data.forEach(p => {
+                staffSelect.innerHTML += `<option value="${p.name}">${p.name}</option>`;
+            });
+        }
+        
+        staffSelect.addEventListener('change', async () => {
+            const nome = staffSelect.value;
+            if (!nome) return;
+            
+            swipeArea.style.display = 'none';
+            loadingState.style.display = 'block';
+            statusMsg.textContent = '';
+            
+            // Cerca l'ultimo record di timbratura di questa persona
+            const { data, error } = await supabase.from('timbrature')
+                .select('*')
+                .eq('azienda_id', aziendaId)
+                .eq('nome_dipendente', nome)
+                .order('ingresso', { ascending: false })
+                .limit(1);
+                
+            loadingState.style.display = 'none';
+            swipeArea.style.display = 'block';
+            resetSwipe();
+            
+            if (data && data.length > 0 && !data[0].uscita) {
+                // Sta lavorando, deve uscire
+                currentStatus = 'out';
+                lastRecordId = data[0].id;
+                swipeArea.classList.add('out-mode');
+                swipeText.textContent = "Scorri per Uscire";
+            } else {
+                // Non sta lavorando, deve entrare
+                currentStatus = 'in';
+                lastRecordId = null;
+                swipeArea.classList.remove('out-mode');
+                swipeText.textContent = "Scorri per Entrare";
+            }
+        });
+        
+        // Logica Swipe
+        let isDragging = false;
+        let startX = 0;
+        let buttonX = 0;
+        let maxSwipe = 0;
+        
+        swipeButton.addEventListener('mousedown', startDrag);
+        swipeButton.addEventListener('touchstart', startDrag, {passive: true});
+        
+        window.addEventListener('mousemove', drag);
+        window.addEventListener('touchmove', drag, {passive: false});
+        
+        window.addEventListener('mouseup', endDrag);
+        window.addEventListener('touchend', endDrag);
+        
+        function startDrag(e) {
+            isDragging = true;
+            startX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+            maxSwipe = swipeArea.offsetWidth - swipeButton.offsetWidth - 10;
+            swipeButton.style.transition = 'none';
+            swipeText.style.opacity = '0.3';
+        }
+        
+        function drag(e) {
+            if (!isDragging) return;
+            // e.preventDefault(); // Prevents scroll on mobile
+            const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
+            let moveX = clientX - startX;
+            
+            if (moveX < 0) moveX = 0;
+            if (moveX > maxSwipe) moveX = maxSwipe;
+            
+            buttonX = moveX;
+            swipeButton.style.transform = `translateX(${moveX}px)`;
+            
+            if (moveX === maxSwipe) {
+                isDragging = false;
+                eseguiTimbratura();
+            }
+        }
+        
+        function endDrag() {
+            if (!isDragging) return;
+            isDragging = false;
+            if (buttonX < maxSwipe) {
+                resetSwipe();
+            }
+        }
+        
+        function resetSwipe() {
+            swipeButton.style.transition = 'transform 0.3s ease';
+            swipeButton.style.transform = 'translateX(0px)';
+            swipeText.style.opacity = '1';
+            buttonX = 0;
+        }
+        
+        async function eseguiTimbratura() {
+            const nome = staffSelect.value;
+            swipeArea.style.display = 'none';
+            loadingState.style.display = 'block';
+            
+            const now = new Date().toISOString();
+            
+            if (currentStatus === 'in') {
+                const { error } = await supabase.from('timbrature').insert([{
+                    azienda_id: aziendaId,
+                    nome_dipendente: nome,
+                    ingresso: now
+                }]);
+                loadingState.style.display = 'none';
+                if (error) {
+                    statusMsg.style.color = '#ef4444';
+                    statusMsg.textContent = "Errore durante l'ingresso. Riprova.";
+                    swipeArea.style.display = 'block';
+                    resetSwipe();
+                } else {
+                    statusMsg.style.color = '#10b981';
+                    statusMsg.textContent = `✅ Entrata registrata alle ${new Date().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}`;
+                    // Update state to allow clock out
+                    staffSelect.dispatchEvent(new Event('change'));
+                }
+            } else if (currentStatus === 'out') {
+                const { error } = await supabase.from('timbrature').update({
+                    uscita: now
+                }).eq('id', lastRecordId);
+                
+                loadingState.style.display = 'none';
+                if (error) {
+                    statusMsg.style.color = '#ef4444';
+                    statusMsg.textContent = "Errore durante l'uscita. Riprova.";
+                    swipeArea.style.display = 'block';
+                    resetSwipe();
+                } else {
+                    statusMsg.style.color = '#10b981';
+                    statusMsg.textContent = `✅ Uscita registrata alle ${new Date().toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}`;
+                    // Update state to allow clock in
+                    staffSelect.dispatchEvent(new Event('change'));
+                }
+            }
+        }
+    </script>
+</body>
+</html>
