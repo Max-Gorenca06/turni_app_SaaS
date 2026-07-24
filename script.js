@@ -2182,7 +2182,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const timbratoreModal = document.getElementById('timbratore-modal');
         document.getElementById('timbratoreBtn')?.addEventListener('click', () => {
             if(!currentAziendaId) return;
-            document.getElementById('timbratore-link-input').value = window.location.origin + '/timbratore?id=' + currentAziendaId;
+            document.getElementById('timbratore-link-input').value = window.location.href.split('?')[0].replace('index.html', '').replace(/\/$/, '') + '/timbratore.html?id=' + currentAziendaId;
             // Set current month to input
             const now = new Date();
             document.getElementById('report-month').value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');

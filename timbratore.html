@@ -58,7 +58,7 @@
     <script>
         const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         
         const urlParams = new URLSearchParams(window.location.search);
         const aziendaId = urlParams.get('id');
@@ -88,7 +88,7 @@
         }
         
         async function loadStaff() {
-            const { data, error } = await supabase.from('staff').select('name').eq('azienda_id', aziendaId).order('name');
+            const { data, error } = await supabaseClient.from('staff').select('name').eq('azienda_id', aziendaId).order('name');
             if (error || !data) {
                 staffSelect.innerHTML = '<option value="" disabled>Errore caricamento</option>';
                 return;
@@ -108,7 +108,7 @@
             statusMsg.textContent = '';
             
             // Cerca l'ultimo record di timbratura di questa persona
-            const { data, error } = await supabase.from('timbrature')
+            const { data, error } = await supabaseClient.from('timbrature')
                 .select('*')
                 .eq('azienda_id', aziendaId)
                 .eq('nome_dipendente', nome)
@@ -198,7 +198,7 @@
             const now = new Date().toISOString();
             
             if (currentStatus === 'in') {
-                const { error } = await supabase.from('timbrature').insert([{
+                const { error } = await supabaseClient.from('timbrature').insert([{
                     azienda_id: aziendaId,
                     nome_dipendente: nome,
                     ingresso: now
@@ -216,7 +216,7 @@
                     staffSelect.dispatchEvent(new Event('change'));
                 }
             } else if (currentStatus === 'out') {
-                const { error } = await supabase.from('timbrature').update({
+                const { error } = await supabaseClient.from('timbrature').update({
                     uscita: now
                 }).eq('id', lastRecordId);
                 
