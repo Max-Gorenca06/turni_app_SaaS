@@ -1,11 +1,13 @@
-const CACHE_NAME = 'turni-boschetto-v20';
+const CACHE_NAME = 'turni-boschetto-v22';
 const urlsToCache = [
   './',
   './index.html',
   './style_v2.css',
   './script.js',
   './manifest.json',
-  './richiesta_assenze.html'
+  './richiesta_assenze.html',
+  './app_dipendente.html',
+  './app_dipendente.js'
 ];
 
 // Installazione: salva i file e FORZA l'attivazione immediata

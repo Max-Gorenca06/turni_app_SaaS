@@ -4,16 +4,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let currentUser = null;
-let currentAzienda = null;
+let allProfiles = [];
+let currentProfile = null;
 let currentStatus = null; // for timbratore
 let lastRecordId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Check local storage for session
-    const savedUser = localStorage.getItem('tc_employee_user');
-    if (savedUser) {
-        currentUser = JSON.parse(savedUser);
+    const savedProfiles = localStorage.getItem('tc_employee_profiles');
+    if (savedProfiles) {
+        allProfiles = JSON.parse(savedProfiles);
+        currentProfile = allProfiles[0];
         showApp();
         loadData();
     }
@@ -31,18 +31,18 @@ document.addEventListener('DOMContentLoaded', () => {
         err.style.display = 'none';
 
         try {
-            // Find staff with email and password
             const { data, error } = await supabaseClient
                 .from('staff')
-                .select('*')
+                .select('*, aziende(nome_ristorante)')
                 .eq('email', email)
                 .eq('password', password);
 
             if (error) throw error;
 
             if (data && data.length > 0) {
-                currentUser = data[0];
-                localStorage.setItem('tc_employee_user', JSON.stringify(currentUser));
+                allProfiles = data;
+                currentProfile = allProfiles[0];
+                localStorage.setItem('tc_employee_profiles', JSON.stringify(allProfiles));
                 showApp();
                 loadData();
             } else {
@@ -58,13 +58,11 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.disabled = false;
     });
 
-    // Logout
     document.getElementById('logout-btn').addEventListener('click', () => {
-        localStorage.removeItem('tc_employee_user');
+        localStorage.removeItem('tc_employee_profiles');
         window.location.reload();
     });
 
-    // Navigation
     const navItems = document.querySelectorAll('.nav-item');
     const views = document.querySelectorAll('.view');
 
@@ -78,31 +76,47 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Clock
     setInterval(() => {
         const now = new Date();
         document.getElementById('app-clock').textContent = now.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }, 1000);
 
-    // Timbratore Swipe
     setupSwipe();
 
-    // Absence form
     document.getElementById('absence-form').addEventListener('submit', submitAbsence);
+    
+    document.getElementById('azienda-select').addEventListener('change', (e) => {
+        currentProfile = allProfiles.find(p => p.azienda_id === e.target.value);
+        updateProfileView();
+        loadData();
+    });
 });
 
 function showApp() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'flex';
     
-    document.getElementById('user-name').textContent = currentUser.name.split(' ')[0];
-    document.getElementById('user-avatar').textContent = currentUser.name.charAt(0).toUpperCase();
-    
-    document.getElementById('prof-name').textContent = currentUser.name;
-    document.getElementById('prof-email').textContent = currentUser.email || 'N/D';
-    document.getElementById('prof-reparto').textContent = currentUser.reparto || 'N/D';
+    const select = document.getElementById('azienda-select');
+    select.innerHTML = '';
+    allProfiles.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.azienda_id;
+        opt.textContent = p.aziende ? p.aziende.nome_ristorante : 'Azienda Sconosciuta';
+        if (p.azienda_id === currentProfile.azienda_id) opt.selected = true;
+        select.appendChild(opt);
+    });
 
-    // Get time of day
+    updateProfileView();
+}
+
+function updateProfileView() {
+    document.getElementById('user-name').textContent = currentProfile.name.split(' ')[0];
+    document.getElementById('user-avatar').textContent = currentProfile.name.charAt(0).toUpperCase();
+    
+    document.getElementById('prof-name').textContent = currentProfile.name;
+    document.getElementById('prof-email').textContent = currentProfile.email || 'N/D';
+    document.getElementById('prof-reparto').textContent = currentProfile.reparto || 'N/D';
+
     const hour = new Date().getHours();
     let greeting = 'Buongiorno,';
     if (hour >= 14 && hour < 18) greeting = 'Buon pomeriggio,';
@@ -111,76 +125,68 @@ function showApp() {
 }
 
 async function loadData() {
-    // 1. Get Azienda Name
-    const { data: azData } = await supabaseClient.from('aziende').select('nome_ristorante').eq('id', currentUser.azienda_id).single();
-    if (azData) {
-        document.getElementById('azienda-name').textContent = azData.nome_ristorante;
-    }
-
-    // 2. Load Shifts
     loadShifts();
-
-    // 3. Load Timbrature status
     checkTimbratoreStatus();
-
-    // 4. Load Absences
     loadAbsences();
 }
 
 async function loadShifts() {
     const list = document.getElementById('turni-list');
     try {
-        // Find the current week's griglia
-        // (A simplified version: just fetch the latest griglia for the azienda)
         const { data: griglie } = await supabaseClient
             .from('griglie_turni')
             .select('*')
-            .eq('azienda_id', currentUser.azienda_id)
+            .eq('azienda_id', currentProfile.azienda_id)
+            .eq('pubblicato', true)
             .order('data_lunedi', { ascending: false })
-            .limit(1);
+            .limit(4);
 
         if (!griglie || griglie.length === 0) {
-            list.innerHTML = '<div class="empty-state"><div class="empty-icon">🏖️</div><div>Nessun turno assegnato questa settimana.</div></div>';
+            list.innerHTML = '<div class="empty-state"><div class="empty-icon">🏖️</div><div>Nessun turno pubblicato.</div></div>';
             return;
         }
 
-        const g = griglie[0];
-        const dati = g.dati_griglia || {};
-        let myShifts = [];
-        
-        // Dati is an object with keys like "Lunedì-pranzo", "Lunedì-cena", "Martedì-..."
-        // Each key has an array of objects {name: "Mario Rossi", ...}
-        
         const daysOrder = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
+        let html = '';
 
-        for (const [key, staffArray] of Object.entries(dati)) {
-            if (key.startsWith('_metadata') || !Array.isArray(staffArray)) continue;
+        griglie.forEach(g => {
+            const dati = g.dati_griglia || {};
+            let myShifts = [];
             
-            const isAssigned = staffArray.some(s => s.name === currentUser.name);
-            if (isAssigned) {
-                const parts = key.split('-');
-                const day = parts[0];
-                const shift = parts.slice(1).join('-');
-                myShifts.push({ day, shift });
+            for (const [key, staffArray] of Object.entries(dati)) {
+                if (key.startsWith('_metadata') || !Array.isArray(staffArray)) continue;
+                const isAssigned = staffArray.some(s => s.name === currentProfile.name);
+                if (isAssigned) {
+                    const parts = key.split('-');
+                    const day = parts[0];
+                    const shift = parts.slice(1).join('-');
+                    myShifts.push({ day, shift });
+                }
             }
-        }
 
-        // Sort by day of week
-        myShifts.sort((a, b) => daysOrder.indexOf(a.day) - daysOrder.indexOf(b.day));
+            myShifts.sort((a, b) => daysOrder.indexOf(a.day) - daysOrder.indexOf(b.day));
 
-        if (myShifts.length === 0) {
-            list.innerHTML = '<div class="empty-state"><div class="empty-icon">🏖️</div><div>Nessun turno assegnato questa settimana.</div></div>';
-        } else {
-            list.innerHTML = myShifts.map(s => `
-                <div class="shift-card">
-                    <div>
-                        <div class="shift-day">${s.day}</div>
-                        <div class="shift-time">${capitalize(s.shift)}</div>
+            const isCurrentOrFutureWeek = new Date(g.data_lunedi).getTime() + (7 * 24 * 60 * 60 * 1000) > new Date().getTime();
+            
+            html += `<div style="font-size: 13px; color: #64748b; margin-top: 20px; margin-bottom: 10px; font-weight: 600; text-transform: uppercase;">Settimana del ${new Date(g.data_lunedi).toLocaleDateString('it-IT')} ${isCurrentOrFutureWeek ? '(Attuale)' : '(Passata)'}</div>`;
+
+            if (myShifts.length === 0) {
+                html += '<div style="background: var(--surface); padding: 15px; border-radius: 12px; border: 1px dashed var(--border); color: var(--text-light); text-align: center; font-size: 14px;">Nessun turno assegnato.</div>';
+            } else {
+                html += myShifts.map(s => `
+                    <div class="shift-card" ${!isCurrentOrFutureWeek ? 'style="opacity: 0.7;"' : ''}>
+                        <div>
+                            <div class="shift-day">${s.day}</div>
+                            <div class="shift-time">${capitalize(s.shift)}</div>
+                        </div>
+                        <div class="shift-role">${currentProfile.reparto}</div>
                     </div>
-                    <div class="shift-role">${currentUser.reparto}</div>
-                </div>
-            `).join('');
-        }
+                `).join('');
+            }
+        });
+        
+        list.innerHTML = html;
+        
     } catch(e) {
         console.error(e);
         list.innerHTML = '<div style="color:red; text-align:center;">Errore caricamento turni</div>';
@@ -197,8 +203,8 @@ async function checkTimbratoreStatus() {
         const { data, error } = await supabaseClient
             .from('timbrature')
             .select('*')
-            .eq('azienda_id', currentUser.azienda_id)
-            .eq('nome_dipendente', currentUser.name)
+            .eq('azienda_id', currentProfile.azienda_id)
+            .eq('nome_dipendente', currentProfile.name)
             .order('ingresso', { ascending: false })
             .limit(5);
 
@@ -214,10 +220,11 @@ async function checkTimbratoreStatus() {
                     <strong>${i} - ${u}</strong>
                 </div>`;
             }).join('');
+        } else {
+            recentDiv.innerHTML = 'Nessuna timbratura recente.';
         }
 
         if (data && data.length > 0 && !data[0].uscita) {
-            // Already clocked in
             currentStatus = 'in';
             lastRecordId = data[0].id;
             updateSwipeUI('in');
@@ -260,7 +267,7 @@ function setupSwipe() {
     
     let isDragging = false;
     let startX = 0;
-    const maxDrag = 250; // area width (300) - btn width (50)
+    const maxDrag = 250;
 
     btn.addEventListener('touchstart', e => {
         isDragging = true;
@@ -290,7 +297,6 @@ function setupSwipe() {
         }
     });
 
-    // Mouse support for testing
     btn.addEventListener('mousedown', e => {
         isDragging = true;
         startX = e.clientX - btn.getBoundingClientRect().left;
@@ -329,8 +335,8 @@ async function recordTime() {
         const now = new Date().toISOString();
         if (currentStatus === 'out') {
             const { data, error } = await supabaseClient.from('timbrature').insert([{
-                azienda_id: currentUser.azienda_id,
-                nome_dipendente: currentUser.name,
+                azienda_id: currentProfile.azienda_id,
+                nome_dipendente: currentProfile.name,
                 ingresso: now
             }]).select();
             if (error) throw error;
@@ -347,7 +353,7 @@ async function recordTime() {
         
         setTimeout(() => {
             updateSwipeUI(currentStatus);
-            checkTimbratoreStatus(); // refresh list
+            checkTimbratoreStatus();
             area.style.pointerEvents = 'auto';
         }, 1000);
 
@@ -372,8 +378,8 @@ async function submitAbsence(e) {
 
     try {
         const { error } = await supabaseClient.from('assenze_globali').insert([{
-            azienda_id: currentUser.azienda_id,
-            nome_dipendente: currentUser.name,
+            azienda_id: currentProfile.azienda_id,
+            nome_dipendente: currentProfile.name,
             data_assenza: date,
             tipo_assenza: type,
             nota: note
@@ -397,8 +403,8 @@ async function loadAbsences() {
     try {
         const { data } = await supabaseClient.from('assenze_globali')
             .select('*')
-            .eq('azienda_id', currentUser.azienda_id)
-            .eq('nome_dipendente', currentUser.name)
+            .eq('azienda_id', currentProfile.azienda_id)
+            .eq('nome_dipendente', currentProfile.name)
             .order('data_assenza', { ascending: false })
             .limit(10);
             

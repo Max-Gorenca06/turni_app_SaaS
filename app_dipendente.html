@@ -329,9 +329,7 @@
                     <h1 class="name" id="user-name">Nome</h1>
                 </div>
             </div>
-            <div style="background: #f1f5f9; padding: 8px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: #475569;" id="azienda-name">
-                Azienda
-            </div>
+            <select id="azienda-select" style="background: #f1f5f9; padding: 8px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: #475569; border: none; outline: none; appearance: none; text-align: right;"></select>
         </header>
 
         <div class="content">
@@ -375,9 +373,10 @@
                     
                     <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; margin-top: 10px;">Tipo</label>
                     <select id="abs-type" class="login-input" required>
-                        <option value="ferie">Ferie / Riposo</option>
-                        <option value="malattia">Malattia</option>
-                        <option value="permesso">Permesso</option>
+                        <option value="Tutto il giorno">Tutto il giorno (Ferie/Malattia)</option>
+                        <option value="Pranzo">Assente a Pranzo</option>
+                        <option value="Cena">Assente a Cena</option>
+                        <option value="Permesso">Permesso orario</option>
                     </select>
 
                     <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; margin-top: 10px;">Note (Opzionale)</label>

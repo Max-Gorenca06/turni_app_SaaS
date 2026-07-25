@@ -1297,24 +1297,80 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- GESTIONE ESPORTAZIONE ICS ---
-    document.getElementById('publishBtn')?.addEventListener('click', () => {
-        const modal = document.getElementById('ics-modal');
-        const select = document.getElementById('select-staff-ics');
-        const appLinkInput = document.getElementById('app-dipendenti-link');
-
-        if (modal && select) {
-            if (appLinkInput && currentAziendaId) {
-                appLinkInput.value = window.location.href.split('?')[0].replace('index.html', '').replace(/\/$/, '') + '/app_dipendente.html';
+    document.getElementById('publishBtn')?.addEventListener('click', async () => {
+        if (!currentAziendaId || !elements.startDatePicker.value) return alert("Errore: seleziona prima la settimana.");
+        
+        try {
+            const { data } = await window.supabaseClient.from('griglie_turni').select('pubblicato')
+                .eq('azienda_id', currentAziendaId)
+                .eq('data_lunedi', elements.startDatePicker.value)
+                .single();
+            
+            const isPublished = data && data.pubblicato;
+            const statusText = document.getElementById('publish-status-text');
+            if (statusText) {
+                statusText.textContent = isPublished ? "Stato: 🟢 ONLINE sull'App" : "Stato: 🔴 OFFLINE dall'App";
+                statusText.style.color = isPublished ? "#28a745" : "#ef4444";
             }
+            
+            const modal = document.getElementById('ics-modal');
+            const select = document.getElementById('select-staff-ics');
+            const appLinkInput = document.getElementById('app-dipendenti-link');
 
-            select.innerHTML = '<option value="" disabled selected>Scegli il tuo nome...</option>';
-            staff.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p.name;
-                opt.textContent = p.name;
-                select.appendChild(opt);
-            });
-            modal.style.display = 'flex';
+            if (modal && select) {
+                if (appLinkInput && currentAziendaId) {
+                    appLinkInput.value = window.location.href.split('?')[0].replace('index.html', '').replace(/\/$/, '') + '/app_dipendente.html';
+                }
+
+                select.innerHTML = '<option value="" disabled selected>Scegli il tuo nome...</option>';
+                staff.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.name;
+                    opt.textContent = p.name;
+                    select.appendChild(opt);
+                });
+                modal.style.display = 'flex';
+            }
+        } catch(e) {
+            console.error(e);
+            alert("Errore caricamento stato pubblicazione.");
+        }
+    });
+
+    document.getElementById('publish-app-btn')?.addEventListener('click', async () => {
+        if (!currentAziendaId || !elements.startDatePicker.value) return;
+        try {
+            await window.supabaseClient.from('griglie_turni').update({ pubblicato: true })
+                .eq('azienda_id', currentAziendaId)
+                .eq('data_lunedi', elements.startDatePicker.value);
+            
+            const statusText = document.getElementById('publish-status-text');
+            if (statusText) {
+                statusText.textContent = "Stato: 🟢 ONLINE sull'App";
+                statusText.style.color = "#28a745";
+            }
+            alert("Turni pubblicati con successo!");
+        } catch(e) {
+            console.error(e);
+            alert("Errore durante la pubblicazione.");
+        }
+    });
+
+    document.getElementById('unpublish-btn')?.addEventListener('click', async () => {
+        if (!currentAziendaId || !elements.startDatePicker.value) return;
+        try {
+            await window.supabaseClient.from('griglie_turni').update({ pubblicato: false })
+                .eq('azienda_id', currentAziendaId)
+                .eq('data_lunedi', elements.startDatePicker.value);
+                
+            const statusText = document.getElementById('publish-status-text');
+            if (statusText) {
+                statusText.textContent = "Stato: 🔴 OFFLINE dall'App";
+                statusText.style.color = "#ef4444";
+            }
+            alert("Turni nascosti dall'App Dipendenti.");
+        } catch(e) {
+            console.error(e);
         }
     });
 
@@ -1621,7 +1677,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (sidebar) sidebar.classList.remove('mobile-open');
     });
     
-    elements.closeModalBtn.addEventListener('click', () => elements.staffModal.classList.remove('show'));
+    document.querySelectorAll('.close-button').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const modal = e.target.closest('.modal');
+            if (modal) modal.classList.remove('show');
+            if (modal) modal.style.display = 'none';
+        });
+    });
     
     function createStaffListItem(p) {
         const isFissoStr = p.is_fisso ? '<span style="background: #e0e0e0; color: #555; padding: 2px 5px; border-radius: 3px; font-size: 10px;">Fisso</span>' : '';
@@ -1646,6 +1708,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('staff-fa-camere').checked = p.fa_camere || false;
             document.getElementById('staff-email').value = p.email || '';
             document.getElementById('staff-pin').value = p.password || '';
+            document.getElementById('staff-paga').value = p.paga_oraria || '';
         });
 
         li.querySelector('.btn-del').addEventListener('click', async () => {
@@ -1727,6 +1790,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const fa_camere = document.getElementById('staff-fa-camere').checked;
         const email = document.getElementById('staff-email').value.trim();
         const password = document.getElementById('staff-pin').value.trim();
+        const paga_oraria_val = document.getElementById('staff-paga').value;
+        const paga_oraria = paga_oraria_val ? parseFloat(paga_oraria_val) : null;
 
         if (!name || !group) return alert("Dati mancanti");
 
@@ -1741,12 +1806,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (oldPerson) {
                 for (let aId of azIds) {
                     await window.supabaseClient.from('staff').update({ 
-                        name, reparto: group, maxshifts, is_fisso, fa_camere, email, password
+                        name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, paga_oraria
                     }).eq('name', oldPerson.name).eq('azienda_id', aId);
                 }
             } else {
                 await window.supabaseClient.from('staff').update({ 
-                    name, reparto: group, maxshifts, is_fisso, fa_camere, email, password
+                    name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, paga_oraria
                 }).eq('id', id);
             }
 
@@ -1760,7 +1825,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             // Inserisci per tutte le aziende
             const inserts = azIds.map(aId => ({
-                name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, azienda_id: aId
+                name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, paga_oraria, azienda_id: aId
             }));
             await window.supabaseClient.from('staff').insert(inserts);
         }
