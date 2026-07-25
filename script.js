@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             return;
         }
-        const isScrollable = e.target.closest('#mobile-view, #sidebar.mobile-open, .modal-content');
+        const isScrollable = e.target.closest('#mobile-view, #sidebar, .modal-content, #main, #dashboard-container, #wizard-container, #auth-overlay');
         if (!isScrollable) {
             e.preventDefault(); 
         }
@@ -1300,7 +1300,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('publishBtn')?.addEventListener('click', () => {
         const modal = document.getElementById('ics-modal');
         const select = document.getElementById('select-staff-ics');
+        const appLinkInput = document.getElementById('app-dipendenti-link');
+
         if (modal && select) {
+            if (appLinkInput && currentAziendaId) {
+                appLinkInput.value = window.location.href.split('?')[0].replace('index.html', '').replace(/\/$/, '') + '/app_dipendente.html';
+            }
+
             select.innerHTML = '<option value="" disabled selected>Scegli il tuo nome...</option>';
             staff.forEach(p => {
                 const opt = document.createElement('option');
@@ -1309,6 +1315,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 select.appendChild(opt);
             });
             modal.style.display = 'flex';
+        }
+    });
+
+    document.getElementById('copy-app-link')?.addEventListener('click', () => {
+        const copyText = document.getElementById('app-dipendenti-link');
+        if(copyText) {
+            copyText.select();
+            document.execCommand('copy');
+            alert('Link App copiato!');
         }
     });
 
@@ -1629,6 +1644,8 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('original-name').value = p.id; 
             document.getElementById('staff-fisso').checked = p.is_fisso || false;
             document.getElementById('staff-fa-camere').checked = p.fa_camere || false;
+            document.getElementById('staff-email').value = p.email || '';
+            document.getElementById('staff-pin').value = p.password || '';
         });
 
         li.querySelector('.btn-del').addEventListener('click', async () => {
@@ -1708,6 +1725,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const maxshifts = document.getElementById('staff-max-shifts').value;
         const is_fisso = document.getElementById('staff-fisso').checked;
         const fa_camere = document.getElementById('staff-fa-camere').checked;
+        const email = document.getElementById('staff-email').value.trim();
+        const password = document.getElementById('staff-pin').value.trim();
 
         if (!name || !group) return alert("Dati mancanti");
 
@@ -1722,12 +1741,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (oldPerson) {
                 for (let aId of azIds) {
                     await window.supabaseClient.from('staff').update({ 
-                        name, reparto: group, maxshifts, is_fisso, fa_camere
+                        name, reparto: group, maxshifts, is_fisso, fa_camere, email, password
                     }).eq('name', oldPerson.name).eq('azienda_id', aId);
                 }
             } else {
                 await window.supabaseClient.from('staff').update({ 
-                    name, reparto: group, maxshifts, is_fisso, fa_camere
+                    name, reparto: group, maxshifts, is_fisso, fa_camere, email, password
                 }).eq('id', id);
             }
 
@@ -1741,7 +1760,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             // Inserisci per tutte le aziende
             const inserts = azIds.map(aId => ({
-                name, reparto: group, maxshifts, is_fisso, fa_camere, azienda_id: aId
+                name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, azienda_id: aId
             }));
             await window.supabaseClient.from('staff').insert(inserts);
         }

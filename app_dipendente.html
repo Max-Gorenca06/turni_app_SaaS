@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>App Dipendenti - TurniCloud</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="./manifest.json">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary: #3b82f6;
+            --primary-dark: #2563eb;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --safe-area-bottom: env(safe-area-inset-bottom, 20px);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        /* LOGIN SCREEN */
+        #login-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+        }
+        .login-card {
+            background: var(--surface);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            width: 100%;
+            max-width: 350px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+        .login-input {
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-size: 16px;
+            box-sizing: border-box;
+            background: var(--bg);
+            outline: none;
+            transition: all 0.2s;
+        }
+        .login-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .login-btn {
+            width: 100%;
+            padding: 15px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.2);
+            transition: all 0.2s;
+        }
+        .login-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* MAIN APP */
+        #app-screen {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        /* HEADER */
+        header {
+            background: var(--surface);
+            padding: 20px 20px 15px;
+            padding-top: calc(env(safe-area-inset-top, 20px) + 20px);
+            border-bottom: 1px solid var(--border);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 22px;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .greeting {
+            font-size: 13px;
+            color: var(--text-light);
+        }
+        .name {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        /* CONTENT AREA */
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            padding-bottom: 100px; /* Space for nav */
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: var(--text);
+        }
+
+        /* VIEWS */
+        .view {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .view.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* CARDS */
+        .shift-card {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02), 0 1px 3px rgba(0,0,0,0.04);
+            border: 1px solid var(--border);
+            border-left: 5px solid var(--primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .shift-day {
+            font-size: 14px;
+            color: var(--text-light);
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .shift-time {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        .shift-role {
+            font-size: 13px;
+            padding: 4px 10px;
+            background: #f1f5f9;
+            border-radius: 20px;
+            color: #475569;
+            font-weight: 500;
+        }
+
+        /* TIMBRATORE */
+        .timbratore-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px 0;
+            text-align: center;
+        }
+        .clock {
+            font-size: 42px;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 30px;
+            font-variant-numeric: tabular-nums;
+        }
+        .swipe-area {
+            position: relative;
+            width: 100%;
+            max-width: 300px;
+            height: 60px;
+            background: var(--surface);
+            border-radius: 30px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+        .swipe-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            line-height: 60px;
+            color: var(--text-light);
+            font-weight: 600;
+            font-size: 15px;
+            user-select: none;
+            z-index: 1;
+            transition: opacity 0.3s;
+        }
+        .swipe-button {
+            position: absolute;
+            left: 5px;
+            top: 5px;
+            width: 50px;
+            height: 50px;
+            background: var(--primary);
+            border-radius: 25px;
+            z-index: 2;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+            transition: transform 0.1s;
+        }
+        .swipe-button::after { content: '➔'; color: white; font-size: 20px; }
+
+        /* BOTTOM NAV */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            padding-bottom: calc(10px + var(--safe-area-bottom));
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.05);
+            z-index: 100;
+        }
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: var(--text-light);
+            text-decoration: none;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 8px 20px;
+            border-radius: 12px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .nav-item.active {
+            color: var(--primary);
+        }
+        .nav-icon {
+            font-size: 22px;
+            margin-bottom: 2px;
+        }
+
+        /* Error/Empty states */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-light);
+        }
+        .empty-icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen">
+        <div class="login-card">
+            <div style="font-size: 40px; margin-bottom: 10px;">👋</div>
+            <h1 style="font-size: 24px; font-weight: 800; margin: 0 0 5px 0;">Area Personale</h1>
+            <p style="color: #64748b; font-size: 14px; margin-bottom: 25px;">Accedi per vedere i tuoi turni</p>
+            
+            <form id="login-form">
+                <input type="email" id="login-email" class="login-input" placeholder="La tua Email" required>
+                <input type="password" id="login-password" class="login-input" placeholder="Password o PIN" required>
+                <button type="submit" class="login-btn" id="login-btn">Accedi</button>
+            </form>
+            <div id="login-error" style="color: #ef4444; font-size: 13px; margin-top: 15px; display: none;">Credenziali non valide</div>
+        </div>
+    </div>
+
+    <!-- MAIN APP SCREEN -->
+    <div id="app-screen">
+        <header>
+            <div class="user-info">
+                <div class="avatar" id="user-avatar">A</div>
+                <div>
+                    <div class="greeting" id="greeting">Buongiorno,</div>
+                    <h1 class="name" id="user-name">Nome</h1>
+                </div>
+            </div>
+            <div style="background: #f1f5f9; padding: 8px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; color: #475569;" id="azienda-name">
+                Azienda
+            </div>
+        </header>
+
+        <div class="content">
+            <!-- TURNI VIEW -->
+            <div id="view-turni" class="view active">
+                <div class="section-title">I Tuoi Turni (Questa Settimana)</div>
+                <div id="turni-list">
+                    <div class="empty-state">
+                        <div class="empty-icon">☕</div>
+                        <div>Caricamento turni...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TIMBRATORE VIEW -->
+            <div id="view-timbratore" class="view">
+                <div class="timbratore-container">
+                    <div class="clock" id="app-clock">00:00:00</div>
+                    <p style="color: var(--text-light); margin-bottom: 30px; font-size: 15px;" id="timbratore-status">Scorri per registrare l'ingresso</p>
+                    
+                    <div class="swipe-area" id="app-swipe-area">
+                        <div class="swipe-text" id="app-swipe-text">Scorri per Entrare</div>
+                        <div class="swipe-button" id="app-swipe-button"></div>
+                    </div>
+                    
+                    <div style="margin-top: 40px; width: 100%; text-align: left;">
+                        <div class="section-title" style="font-size: 16px;">Ultime timbrature</div>
+                        <div id="recent-timbrature" style="font-size: 14px; color: var(--text-light);">
+                            Nessuna timbratura recente.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RICHIESTE VIEW -->
+            <div id="view-richieste" class="view">
+                <div class="section-title">Richiedi Assenza / Ferie</div>
+                <form id="absence-form" style="background: var(--surface); padding: 20px; border-radius: 16px; border: 1px solid var(--border);">
+                    <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600;">Data</label>
+                    <input type="date" id="abs-date" class="login-input" required>
+                    
+                    <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; margin-top: 10px;">Tipo</label>
+                    <select id="abs-type" class="login-input" required>
+                        <option value="ferie">Ferie / Riposo</option>
+                        <option value="malattia">Malattia</option>
+                        <option value="permesso">Permesso</option>
+                    </select>
+
+                    <label style="display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; margin-top: 10px;">Note (Opzionale)</label>
+                    <input type="text" id="abs-note" class="login-input" placeholder="Es. Visita medica">
+                    
+                    <button type="submit" class="login-btn" style="margin-top: 10px;">Invia Richiesta</button>
+                    <div id="abs-status" style="margin-top: 10px; font-size: 13px; text-align: center;"></div>
+                </form>
+                
+                <div style="margin-top: 30px;">
+                    <div class="section-title" style="font-size: 16px;">Le tue richieste</div>
+                    <div id="my-absences"></div>
+                </div>
+            </div>
+
+            <!-- PROFILO VIEW -->
+            <div id="view-profilo" class="view">
+                <div class="section-title">Il Mio Profilo</div>
+                <div style="background: var(--surface); padding: 20px; border-radius: 16px; border: 1px solid var(--border); margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">
+                        <span style="color: var(--text-light);">Nome</span>
+                        <span style="font-weight: 600;" id="prof-name">-</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px;">
+                        <span style="color: var(--text-light);">Email</span>
+                        <span style="font-weight: 600;" id="prof-email">-</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: var(--text-light);">Reparto</span>
+                        <span style="font-weight: 600; color: var(--primary);" id="prof-reparto">-</span>
+                    </div>
+                </div>
+                
+                <button id="logout-btn" class="login-btn" style="background: #ef4444;">Esci</button>
+            </div>
+        </div>
+
+        <!-- NAVIGATION -->
+        <nav class="bottom-nav">
+            <div class="nav-item active" data-target="view-turni">
+                <div class="nav-icon">📅</div>
+                <span>Turni</span>
+            </div>
+            <div class="nav-item" data-target="view-timbratore">
+                <div class="nav-icon">⏱️</div>
+                <span>Timbratore</span>
+            </div>
+            <div class="nav-item" data-target="view-richieste">
+                <div class="nav-icon">🏖️</div>
+                <span>Richieste</span>
+            </div>
+            <div class="nav-item" data-target="view-profilo">
+                <div class="nav-icon">👤</div>
+                <span>Profilo</span>
+            </div>
+        </nav>
+    </div>
+
+    <script src="app_dipendente.js?v=1"></script>
+</body>
+</html>

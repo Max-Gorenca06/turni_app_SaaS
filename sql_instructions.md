@@ -6,8 +6,8 @@ Copia il seguente codice nel SQL Editor di Supabase e clicca Run. Questo manterr
 ALTER TABLE public.aziende ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Enable insert for authenticated users" ON public.aziende;
 CREATE POLICY "Enable insert for authenticated users" ON public.aziende FOR INSERT TO authenticated WITH CHECK (true);
-DROP POLICY IF EXISTS "Enable select for authenticated users" ON public.aziende;
-CREATE POLICY "Enable select for authenticated users" ON public.aziende FOR SELECT TO authenticated USING (true);
+DROP POLICY IF EXISTS "Enable select for everyone" ON public.aziende;
+CREATE POLICY "Enable select for everyone" ON public.aziende FOR SELECT USING (true);
 DROP POLICY IF EXISTS "Enable update for authenticated users" ON public.aziende;
 CREATE POLICY "Enable update for authenticated users" ON public.aziende FOR UPDATE TO authenticated USING (true);
 
@@ -24,8 +24,12 @@ CREATE POLICY "Users can manage their company shifts" ON public.griglie_turni FO
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM public.profili WHERE profili.id = auth.uid() AND profili.azienda_id = griglie_turni.azienda_id)
 );
+DROP POLICY IF EXISTS "Enable select for everyone" ON public.griglie_turni;
+CREATE POLICY "Enable select for everyone" ON public.griglie_turni FOR SELECT USING (true);
 
 -- 4. STAFF
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS password text;
 ALTER TABLE public.staff ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can manage their company staff" ON public.staff;
 CREATE POLICY "Users can manage their company staff" ON public.staff FOR ALL TO authenticated USING (
@@ -33,6 +37,8 @@ CREATE POLICY "Users can manage their company staff" ON public.staff FOR ALL TO 
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM public.profili WHERE profili.id = auth.uid() AND profili.azienda_id = staff.azienda_id)
 );
+DROP POLICY IF EXISTS "Enable select for everyone" ON public.staff;
+CREATE POLICY "Enable select for everyone" ON public.staff FOR SELECT USING (true);
 
 -- 5. ASSENZE GLOBALI
 ALTER TABLE public.assenze_globali ENABLE ROW LEVEL SECURITY;
@@ -42,4 +48,8 @@ CREATE POLICY "Users can manage their company absences" ON public.assenze_global
 ) WITH CHECK (
   EXISTS (SELECT 1 FROM public.profili WHERE profili.id = auth.uid() AND profili.azienda_id = assenze_globali.azienda_id)
 );
+DROP POLICY IF EXISTS "Enable select and insert for everyone" ON public.assenze_globali;
+CREATE POLICY "Enable select and insert for everyone" ON public.assenze_globali FOR SELECT USING (true);
+CREATE POLICY "Enable insert for everyone" ON public.assenze_globali FOR INSERT WITH CHECK (true);
+
 ```
