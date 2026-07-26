@@ -224,7 +224,7 @@
             } else if (currentStatus === 'out') {
                 const { error } = await supabaseClient.from('timbrature').update({
                     uscita: now
-                }).eq('id', lastRecordId);
+                }).eq('id', lastRecordId).eq('azienda_id', aziendaId);
                 
                 loadingState.style.display = 'none';
                 if (error) {

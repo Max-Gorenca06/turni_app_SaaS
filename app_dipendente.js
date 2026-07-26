@@ -31,16 +31,28 @@ document.addEventListener('DOMContentLoaded', () => {
         err.style.display = 'none';
 
         try {
-            const { data, error } = await supabaseClient
-                .from('staff')
-                .select('*, aziende(nome_ristorante)')
-                .eq('email', email)
-                .eq('password', password);
+            let staffData = null;
 
-            if (error) throw error;
+            // Tentativo 1: Uso della funzione RPC sicura (consigliata)
+            const { data: rpcData, error: rpcError } = await supabaseClient
+                .rpc('verify_staff_credentials', { p_email: email, p_password: password });
 
-            if (data && data.length > 0) {
-                allProfiles = data;
+            if (!rpcError && rpcData && rpcData.length > 0) {
+                staffData = rpcData;
+            } else {
+                // Fallback di compatibilità per tabelle tradizionali
+                const { data: directData, error: directError } = await supabaseClient
+                    .from('staff')
+                    .select('*, aziende(nome_ristorante)')
+                    .eq('email', email)
+                    .eq('password', password);
+                
+                if (directError) throw directError;
+                staffData = directData;
+            }
+
+            if (staffData && staffData.length > 0) {
+                allProfiles = staffData;
                 currentProfile = allProfiles[0];
                 localStorage.setItem('tc_employee_profiles', JSON.stringify(allProfiles));
                 showApp();
@@ -50,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (e) {
             console.error(e);
-            err.textContent = 'Errore di connessione.';
+            err.textContent = 'Errore di connessione o credenziali non valide.';
             err.style.display = 'block';
         }
 
