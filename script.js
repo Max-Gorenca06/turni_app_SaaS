@@ -1793,56 +1793,57 @@ document.addEventListener('DOMContentLoaded', () => {
         const paga_oraria_val = document.getElementById('staff-paga').value;
         const paga_oraria = paga_oraria_val ? parseFloat(paga_oraria_val) : null;
 
-        if (!name || !group) return alert("Dati mancanti");
+        if (!name || !group) return alert("Compila tutti i campi obbligatori (Nome e Gruppo).");
 
-        
-        const { data: allAz } = await window.supabaseClient.from('aziende').select('id');
-        const azIds = (allAz && allAz.length > 0) ? allAz.map(a => a.id) : [currentAziendaId];
-
-        if (id) {
-            const oldPerson = staff.find(p => p.id == id);
-            
-            // Aggiorna in tutte le aziende basandosi sul nome originale
-            if (oldPerson) {
-                for (let aId of azIds) {
-                    await window.supabaseClient.from('staff').update({ 
-                        name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, paga_oraria
-                    }).eq('name', oldPerson.name).eq('azienda_id', aId);
-                }
-            } else {
-                await window.supabaseClient.from('staff').update({ 
+        try {
+            if (id) {
+                const oldPerson = staff.find(p => p.id == id);
+                
+                const { error } = await window.supabaseClient.from('staff').update({ 
                     name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, paga_oraria
                 }).eq('id', id);
+
+                if (error) {
+                    console.error("Errore aggiornamento staff:", error);
+                    alert(`Impossibile salvare le credenziali staff: ${error.message || error.details || 'Verifica di aver eseguito lo script SQL su Supabase per aggiungere le colonne email e password.'}`);
+                    return;
+                }
+
+                if (oldPerson && oldPerson.name !== name) {
+                    document.querySelectorAll(`.placed[data-name="${oldPerson.name}"]`).forEach(el => {
+                        el.dataset.name = name;
+                        el.textContent = name;
+                    });
+                    await saveState(); 
+                }
+            } else {
+                const { error } = await window.supabaseClient.from('staff').insert([{
+                    name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, paga_oraria, azienda_id: currentAziendaId
+                }]);
+
+                if (error) {
+                    console.error("Errore inserimento staff:", error);
+                    alert(`Impossibile creare lo staff: ${error.message || error.details || 'Verifica di aver eseguito lo script SQL su Supabase per creare le colonne email e password.'}`);
+                    return;
+                }
             }
 
-            if (oldPerson && oldPerson.name !== name) {
-                document.querySelectorAll(`.placed[data-name="${oldPerson.name}"]`).forEach(el => {
-                    el.dataset.name = name;
-                    el.textContent = name;
-                });
-                await saveState(); 
-            }
-        } else {
-            // Inserisci per tutte le aziende
-            const inserts = azIds.map(aId => ({
-                name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, paga_oraria, azienda_id: aId
-            }));
-            await window.supabaseClient.from('staff').insert(inserts);
+            await loadStaff();
+            populateSidebar(); 
+            populateStaffModal();
+            elements.staffForm.reset();
+            document.getElementById('original-name').value = ''; 
+            elements.staffForm.style.display = 'none';
+            elements.addNewStaffBtn.style.display = 'block';
+            
+            document.querySelectorAll('.cell').forEach(c => { c.innerHTML = ''; });
+            await loadState();
+
+            if (typeof renderMobileView === 'function') renderMobileView();
+        } catch (err) {
+            console.error("Errore imprevisto salvataggio staff:", err);
+            alert("Si è verificato un errore durante il salvataggio.");
         }
-
-        await loadStaff();
- 
-        populateSidebar(); 
-        populateStaffModal();
-        elements.staffForm.reset();
-        document.getElementById('original-name').value = ''; 
-        elements.staffForm.style.display = 'none';
-        elements.addNewStaffBtn.style.display = 'block';
-        
-        document.querySelectorAll('.cell').forEach(c => { c.innerHTML = ''; });
-        await loadState();
-
-        if (typeof renderMobileView === 'function') renderMobileView();
     });
 
     document.addEventListener('keydown', (e) => {
