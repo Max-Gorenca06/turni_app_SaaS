@@ -821,8 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
         if (inputTitleEl) inputTitleEl.value = `${nomeRist} - DAL ${startFormatted.toUpperCase()} AL ${endFormatted.toUpperCase()}`;
-
-        const headers = document.querySelectorAll('thead th');
+        const headers = document.querySelectorAll('#main table thead th');
         for (let i = 0; i < 7; i++) {
             if (headers[i+1]) {
                 const d = new Date(start);
