@@ -417,9 +417,11 @@ async function submitAbsence(e) {
         const { error } = await supabaseClient.from('assenze_globali').insert([{
             azienda_id: currentProfile.azienda_id,
             nome_dipendente: currentProfile.name,
-            data_assenza: date,
-            tipo_assenza: type,
-            nota: note
+            data_inizio: date,
+            data_fine: date,
+            turno_specifico: type,
+            motivo: note,
+            stato: 'IN ATTESA'
         }]);
         
         if (error) throw error;
@@ -442,18 +444,26 @@ async function loadAbsences() {
             .select('*')
             .eq('azienda_id', currentProfile.azienda_id)
             .eq('nome_dipendente', currentProfile.name)
-            .order('data_assenza', { ascending: false })
+            .order('data_inizio', { ascending: false })
             .limit(10);
             
         if (data && data.length > 0) {
-            div.innerHTML = data.map(a => `
-                <div style="background: #ffffff; padding: 12px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #e2e8f0; display:flex; justify-content: space-between;">
+            div.innerHTML = data.map(a => {
+                let badgeColor = '#f59e0b'; // In attesa
+                if (a.stato === 'APPROVATA') badgeColor = '#10b981';
+                if (a.stato === 'RIFIUTATA') badgeColor = '#ef4444';
+
+                return `
+                <div style="background: #ffffff; padding: 12px; margin-bottom: 8px; border-radius: 8px; border: 1px solid #e2e8f0; display:flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <div style="font-weight: 600;">${new Date(a.data_assenza).toLocaleDateString('it-IT')}</div>
-                        <div style="font-size: 12px; color: #64748b;">${capitalize(a.tipo_assenza)} ${a.nota ? '- '+a.nota : ''}</div>
+                        <div style="font-weight: 600;">${new Date(a.data_inizio).toLocaleDateString('it-IT')}</div>
+                        <div style="font-size: 12px; color: #64748b;">${capitalize(a.turno_specifico)} ${a.motivo ? '- '+a.motivo : ''}</div>
+                    </div>
+                    <div style="font-size: 10px; padding: 4px 8px; border-radius: 12px; background: ${badgeColor}20; color: ${badgeColor}; font-weight: bold;">
+                        ${a.stato}
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         } else {
             div.innerHTML = '<div style="font-size:14px; color:#64748b;">Nessuna richiesta recente.</div>';
         }
