@@ -2562,7 +2562,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const ore = report[nome].ore;
                 let costoOrario = 0;
                 
-                if (staffMap[nome] && staffMap[nome].costo_orario) {
+                if (staffMap[nome] && staffMap[nome].paga_oraria) {
+                    costoOrario = parseFloat(staffMap[nome].paga_oraria) || 0;
+                } else if (staffMap[nome] && staffMap[nome].costo_orario) {
                     costoOrario = parseFloat(staffMap[nome].costo_orario) || 0;
                 } else if (staffMap[nome] && staffMap[nome].costo) {
                     costoOrario = parseFloat(staffMap[nome].costo) || 0;

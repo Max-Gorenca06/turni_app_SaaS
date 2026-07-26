@@ -195,15 +195,30 @@ async function loadShifts() {
                     'Domenica': '#06b6d4'  // Cyan
                 };
                 
-                html += myShifts.map(s => `
-                    <div class="shift-card" style="border-left-color: ${dayColors[capitalize(s.day)] || 'var(--primary)'}; ${!isCurrentOrFutureWeek ? 'opacity: 0.7;' : ''}">
-                        <div>
-                            <div class="shift-day">${capitalize(s.day)}</div>
-                            <div class="shift-time">${capitalize(s.shift)}</div>
-                        </div>
-                        <div class="shift-role">${currentProfile.reparto}</div>
-                    </div>
-                `).join('');
+                daysOrder.forEach(dayName => {
+                    const shiftsForDay = myShifts.filter(s => capitalize(s.day) === dayName);
+                    if (shiftsForDay.length > 0) {
+                        const joinedShifts = shiftsForDay.map(s => capitalize(s.shift)).join(', ');
+                        html += `
+                            <div class="shift-card" style="border-left-color: ${dayColors[dayName] || 'var(--primary)'}; ${!isCurrentOrFutureWeek ? 'opacity: 0.7;' : ''}">
+                                <div>
+                                    <div class="shift-day">${dayName}</div>
+                                    <div class="shift-time">${joinedShifts}</div>
+                                </div>
+                                <div class="shift-role">${currentProfile.reparto}</div>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div class="shift-card" style="border-left-color: #cbd5e1; background: #f8fafc; box-shadow: none; ${!isCurrentOrFutureWeek ? 'opacity: 0.7;' : ''}">
+                                <div>
+                                    <div class="shift-day" style="color: #94a3b8;">${dayName}</div>
+                                    <div class="shift-time" style="color: #94a3b8; font-weight: normal;">Riposo</div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
             }
         });
         
