@@ -375,7 +375,10 @@ document.addEventListener('DOMContentLoaded', () => {
             bell.parentNode.replaceChild(newBell, bell);
             newBell.addEventListener('click', () => {
                 const absencesModal = document.getElementById('absences-modal');
-                if (absencesModal) absencesModal.classList.add('show');
+                if (absencesModal) {
+                    absencesModal.classList.add('show');
+                    if (typeof renderAbsencesList === 'function') renderAbsencesList();
+                }
             });
         }
 
@@ -479,6 +482,53 @@ document.addEventListener('DOMContentLoaded', () => {
         if(btnSettings) {
             btnSettings.style.display = isLoggedIn ? 'inline-block' : 'none';
             btnSettings.addEventListener('click', mostraWizard);
+        }
+
+        const openAbsencesBtn = document.getElementById('open-absences-btn');
+        const absencesModal = document.getElementById('absences-modal');
+        const closeAbsencesBtn = document.getElementById('close-absences-modal');
+
+        if (openAbsencesBtn && absencesModal) {
+            openAbsencesBtn.addEventListener('click', () => {
+                absencesModal.classList.add('show');
+                if (typeof renderAbsencesList === 'function') renderAbsencesList();
+            });
+        }
+        if (closeAbsencesBtn && absencesModal) {
+            closeAbsencesBtn.addEventListener('click', () => {
+                absencesModal.classList.remove('show');
+            });
+        }
+        
+        const addAbsBtn = document.getElementById('add-abs-btn');
+        if (addAbsBtn) {
+            addAbsBtn.addEventListener('click', async () => {
+                const name = document.getElementById('abs-name').value;
+                const day = document.getElementById('abs-day').value;
+                const shift = document.getElementById('abs-shift').value;
+                if (!name || !day) return alert("Compila tutti i campi");
+
+                addAbsBtn.disabled = true;
+                try {
+                    const { error } = await supabaseClient.from('assenze_globali').insert([{
+                        azienda_id: currentAziendaId,
+                        nome_dipendente: name,
+                        data_inizio: day,
+                        data_fine: day,
+                        turno_specifico: shift,
+                        motivo: "Inserito da Manager",
+                        stato: 'APPROVATA'
+                    }]);
+                    if (error) throw error;
+                    await caricaAssenzeGlobali();
+                    if (typeof renderAbsencesList === 'function') renderAbsencesList();
+                    generateGrid();
+                } catch (err) {
+                    console.error(err);
+                    alert("Errore nell'inserimento dell'assenza");
+                }
+                addAbsBtn.disabled = false;
+            });
         }
 
         if (typeof renderMobileView === 'function') renderMobileView();
@@ -728,6 +778,96 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Errore generico in caricaAssenzeGlobali:", err);
         }
     }
+
+    function renderAbsencesList() {
+        const list = document.getElementById('absences-list');
+        if (!list) return;
+
+        // 1. Popola i select manuali
+        const nameSelect = document.getElementById('abs-name');
+        const daySelect = document.getElementById('abs-day');
+        const shiftSelect = document.getElementById('abs-shift');
+        
+        if (nameSelect && window.staffData) {
+            nameSelect.innerHTML = window.staffData.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+        }
+        if (daySelect) {
+            daySelect.innerHTML = '';
+            for(let i=0; i<7; i++) {
+                let d = new Date(elements.startDatePicker.value);
+                d.setDate(d.getDate() + i);
+                daySelect.innerHTML += `<option value="${d.toISOString().split('T')[0]}">${d.toLocaleDateString('it-IT', {weekday:'short', day:'numeric', month:'numeric'})}</option>`;
+            }
+        }
+        if (shiftSelect && window.currentConfig && window.currentConfig.turni) {
+            shiftSelect.innerHTML = `<option value="Tutto il giorno">Tutto il giorno</option>` +
+                window.currentConfig.turni.map(t => `<option value="${t}">${t}</option>`).join('');
+        }
+
+        // 2. Renderizza lista
+        if (!window.assenzeGlobaliRaw || window.assenzeGlobaliRaw.length === 0) {
+            list.innerHTML = '<li>Nessuna richiesta o assenza presente.</li>';
+            return;
+        }
+
+        let html = '';
+        window.assenzeGlobaliRaw.forEach(a => {
+            const inizio = new Date(a.data_inizio).toLocaleDateString('it-IT');
+            const fine = new Date(a.data_fine).toLocaleDateString('it-IT');
+            const dateStr = a.data_inizio === a.data_fine ? inizio : `${inizio} - ${fine}`;
+            
+            let statusColor = '#f59e0b';
+            if (a.stato === 'APPROVATA') statusColor = '#10b981';
+            
+            html += `
+                <li style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; margin-bottom: 8px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong style="color: #334155;">${a.nome_dipendente}</strong><br>
+                        <span style="font-size: 12px; color: #64748b;">${dateStr} | ${a.turno_specifico}</span>
+                        ${a.motivo ? `<br><span style="font-size: 12px; color: #94a3b8; font-style: italic;">"${a.motivo}"</span>` : ''}
+                    </div>
+                    <div style="display: flex; gap: 5px; align-items: center;">
+                        <span style="font-size: 11px; padding: 4px 8px; border-radius: 12px; background: ${statusColor}20; color: ${statusColor}; font-weight: bold; margin-right: 5px;">${a.stato}</span>
+                        ${a.stato === 'IN ATTESA' ? `
+                            <button onclick="gestisciAssenza('${a.id}', 'APPROVATA')" style="background: #10b981; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">Approva</button>
+                            <button onclick="gestisciAssenza('${a.id}', 'RIFIUTATA')" style="background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">Rifiuta</button>
+                        ` : `
+                            <button onclick="eliminaAssenza('${a.id}')" style="background: #ef4444; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">Elimina</button>
+                        `}
+                    </div>
+                </li>
+            `;
+        });
+        list.innerHTML = html;
+    }
+
+    window.gestisciAssenza = async function(id, nuovoStato) {
+        if (!confirm(`Vuoi davvero segnare questa richiesta come ${nuovoStato}?`)) return;
+        try {
+            const { error } = await supabaseClient.from('assenze_globali').update({ stato: nuovoStato }).eq('id', id);
+            if (error) throw error;
+            await caricaAssenzeGlobali();
+            renderAbsencesList();
+            generateGrid(); 
+        } catch (e) {
+            console.error(e);
+            alert("Errore nell'aggiornamento dell'assenza.");
+        }
+    };
+
+    window.eliminaAssenza = async function(id) {
+        if (!confirm('Vuoi davvero eliminare questa assenza dal database?')) return;
+        try {
+            const { error } = await supabaseClient.from('assenze_globali').delete().eq('id', id);
+            if (error) throw error;
+            await caricaAssenzeGlobali();
+            renderAbsencesList();
+            generateGrid();
+        } catch (e) {
+            console.error(e);
+            alert("Errore nell'eliminazione dell'assenza.");
+        }
+    };
 
     // --- SALVATAGGIO GRIGLIA SAAS ---
     async function saveState() {
