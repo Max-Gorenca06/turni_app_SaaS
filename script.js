@@ -658,10 +658,8 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.saveStatus.style.color = "#666";
         }
 
+        updateGridHeaders();
         if (datiDaCaricare) {
-            if (datiDaCaricare["_metadata_title"]) {
-                elements.tableHeaderTitle.value = datiDaCaricare["_metadata_title"];
-            }
             window.assenzeSettimana = datiDaCaricare["_metadata_assenze"] || {};
 
             Object.entries(datiDaCaricare).forEach(([id, people]) => {
@@ -792,11 +790,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-        function updateGridHeaders() {
+    function updateGridHeaders() {
         const startDateStr = elements.startDatePicker.value;
         if (!startDateStr) return;
         
-        const start = new Date(startDateStr);
+        const parts = startDateStr.split('-');
+        if (parts.length !== 3) return;
+
+        const start = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        if (isNaN(start.getTime())) return;
+
         const end = new Date(start);
         end.setDate(start.getDate() + 6);
         
@@ -809,8 +812,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (window._lastAziendeList && currentAziendaId) {
             const az = window._lastAziendeList.find(a => a.id === currentAziendaId);
             if (az) nomeRist = (az.nome_ristorante || az.nome || az.name || az.ragione_sociale || 'TURNI').toUpperCase();
-        } else if (currentAziendaId) {
-            // Try to fetch if missing
+        } else if (currentAziendaId && window.supabaseClient) {
             window.supabaseClient.from('aziende').select('*').eq('id', currentAziendaId).single().then(({data}) => {
                 if (data) {
                     nomeRist = (data.nome_ristorante || data.nome || data.name || data.ragione_sociale || 'TURNI').toUpperCase();
@@ -821,14 +823,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (inputTitleEl) inputTitleEl.value = `${nomeRist} - DAL ${startFormatted.toUpperCase()} AL ${endFormatted.toUpperCase()}`;
 
         const headers = document.querySelectorAll('thead th');
-        // headers[0] is 'Turno'
-        const days = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
         for (let i = 0; i < 7; i++) {
             if (headers[i+1]) {
                 const d = new Date(start);
                 d.setDate(start.getDate() + i);
+                let dayName = d.toLocaleDateString('it-IT', { weekday: 'long' });
+                dayName = dayName.charAt(0).toUpperCase() + dayName.slice(1);
                 const dayStr = d.getDate().toString().padStart(2, '0') + '/' + (d.getMonth() + 1).toString().padStart(2, '0');
-                headers[i+1].textContent = days[i] + ' ' + dayStr;
+                headers[i+1].textContent = dayName + ' ' + dayStr;
             }
         }
     }
@@ -2389,7 +2391,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Pulisce e riempie
             document.querySelectorAll('.cell').forEach(c => { c.innerHTML = ''; updateCellCounter(c); });
             const datiDaCaricare = data.dati_griglia;
-            if (datiDaCaricare["_metadata_title"]) elements.tableHeaderTitle.value = datiDaCaricare["_metadata_title"];
+            // Aggiorna l'intestazione con le date della settimana corrente
+            updateGridHeaders();
             window.assenzeSettimana = datiDaCaricare["_metadata_assenze"] || {};
 
             Object.entries(datiDaCaricare).forEach(([id, people]) => {
