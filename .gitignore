@@ -5,3 +5,4 @@ node_modules/
 *.log
 sql_security_fix.sql
 *.sql
+supabase/.temp/

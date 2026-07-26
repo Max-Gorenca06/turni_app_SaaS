@@ -1796,16 +1796,34 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!name || !group) return alert("Compila tutti i campi obbligatori (Nome e Gruppo).");
 
         try {
+            const payload = { 
+                name, 
+                reparto: group, 
+                maxshifts, 
+                is_fisso, 
+                fa_camere, 
+                email, 
+                password
+            };
+            if (paga_oraria !== null && !isNaN(paga_oraria)) {
+                payload.paga_oraria = paga_oraria;
+            }
+
             if (id) {
                 const oldPerson = staff.find(p => p.id == id);
                 
-                const { error } = await window.supabaseClient.from('staff').update({ 
-                    name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, paga_oraria
-                }).eq('id', id);
+                let { error } = await window.supabaseClient.from('staff').update(payload).eq('id', id);
+
+                // Fallback se la colonna paga_oraria non esiste ancora nel DB Supabase
+                if (error && error.message && error.message.includes('paga_oraria')) {
+                    delete payload.paga_oraria;
+                    const retry = await window.supabaseClient.from('staff').update(payload).eq('id', id);
+                    error = retry.error;
+                }
 
                 if (error) {
                     console.error("Errore aggiornamento staff:", error);
-                    alert(`Impossibile salvare le credenziali staff: ${error.message || error.details || 'Verifica di aver eseguito lo script SQL su Supabase per aggiungere le colonne email e password.'}`);
+                    alert(`Impossibile salvare lo staff: ${error.message || error.details}\n\nNota: Assicurati di aver eseguito le istruzioni SQL su Supabase per aggiungere le colonne email, password e paga_oraria.`);
                     return;
                 }
 
@@ -1817,13 +1835,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     await saveState(); 
                 }
             } else {
-                const { error } = await window.supabaseClient.from('staff').insert([{
-                    name, reparto: group, maxshifts, is_fisso, fa_camere, email, password, paga_oraria, azienda_id: currentAziendaId
-                }]);
+                payload.azienda_id = currentAziendaId;
+                let { error } = await window.supabaseClient.from('staff').insert([payload]);
+
+                // Fallback se la colonna paga_oraria non esiste ancora nel DB Supabase
+                if (error && error.message && error.message.includes('paga_oraria')) {
+                    delete payload.paga_oraria;
+                    const retry = await window.supabaseClient.from('staff').insert([payload]);
+                    error = retry.error;
+                }
 
                 if (error) {
                     console.error("Errore inserimento staff:", error);
-                    alert(`Impossibile creare lo staff: ${error.message || error.details || 'Verifica di aver eseguito lo script SQL su Supabase per creare le colonne email e password.'}`);
+                    alert(`Impossibile creare lo staff: ${error.message || error.details}\n\nNota: Assicurati di aver eseguito le istruzioni SQL su Supabase per aggiungere le colonne email, password e paga_oraria.`);
                     return;
                 }
             }
