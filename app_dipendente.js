@@ -176,7 +176,7 @@ async function loadShifts() {
                 }
             }
 
-            myShifts.sort((a, b) => daysOrder.indexOf(a.day) - daysOrder.indexOf(b.day));
+            myShifts.sort((a, b) => daysOrder.indexOf(capitalize(a.day)) - daysOrder.indexOf(capitalize(b.day)));
 
             const isCurrentOrFutureWeek = new Date(g.data_lunedi).getTime() + (7 * 24 * 60 * 60 * 1000) > new Date().getTime();
             
@@ -185,10 +185,20 @@ async function loadShifts() {
             if (myShifts.length === 0) {
                 html += '<div style="background: var(--surface); padding: 15px; border-radius: 12px; border: 1px dashed var(--border); color: var(--text-light); text-align: center; font-size: 14px;">Nessun turno assegnato.</div>';
             } else {
+                const dayColors = {
+                    'Lunedì': '#3b82f6',   // Blue
+                    'Martedì': '#ef4444',  // Red
+                    'Mercoledì': '#10b981',// Green
+                    'Giovedì': '#f59e0b',  // Orange
+                    'Venerdì': '#8b5cf6',  // Purple
+                    'Sabato': '#ec4899',   // Pink
+                    'Domenica': '#06b6d4'  // Cyan
+                };
+                
                 html += myShifts.map(s => `
-                    <div class="shift-card" ${!isCurrentOrFutureWeek ? 'style="opacity: 0.7;"' : ''}>
+                    <div class="shift-card" style="border-left-color: ${dayColors[capitalize(s.day)] || 'var(--primary)'}; ${!isCurrentOrFutureWeek ? 'opacity: 0.7;' : ''}">
                         <div>
-                            <div class="shift-day">${s.day}</div>
+                            <div class="shift-day">${capitalize(s.day)}</div>
                             <div class="shift-time">${capitalize(s.shift)}</div>
                         </div>
                         <div class="shift-role">${currentProfile.reparto}</div>
