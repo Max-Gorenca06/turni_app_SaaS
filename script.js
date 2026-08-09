@@ -268,6 +268,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 let isOneCol = localStorage.getItem('one-col-mode') === 'true';
                 wizColMode.value = isOneCol ? "1" : "2";
             }
+
+            const wizEnableTime = document.getElementById('wiz-enable-time');
+            if (wizEnableTime) {
+                // Se enableTimeTags non è definito, di default è true per retrocompatibilità
+                wizEnableTime.checked = (window.currentConfig && window.currentConfig.enableTimeTags !== undefined) 
+                                        ? window.currentConfig.enableTimeTags 
+                                        : true;
+            }
             
             const stData = await loadStaff();
             if (stData) {
@@ -298,9 +306,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (config.repartiAzienda) {
                     document.getElementById('wiz-reparti').value = config.repartiAzienda.join('\n');
                 }
+                const wizEnableTime = document.getElementById('wiz-enable-time');
+                if (wizEnableTime) {
+                    wizEnableTime.checked = config.enableTimeTags !== undefined ? config.enableTimeTags : true;
+                }
             } else {
                 document.getElementById('wiz-turni').value = '';
                 document.getElementById('wiz-reparti').value = '';
+                const wizEnableTime = document.getElementById('wiz-enable-time');
+                if (wizEnableTime) wizEnableTime.checked = true;
             }
         }
         
@@ -549,6 +563,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (data && data.dati_griglia) {
             const config = typeof data.dati_griglia === 'string' ? JSON.parse(data.dati_griglia) : data.dati_griglia;
+            window.currentConfig = config;
             if (config.turni) turni = config.turni;
             if (config.fasceOrarie) fasceOrarie = config.fasceOrarie;
             if (config.repartiAzienda) repartiAzienda = config.repartiAzienda;
@@ -1241,6 +1256,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!conferma) return; 
         }
 
+        const checkStaff = staff.find(s => s.name && s.name.toLowerCase() === name.toLowerCase());
+        if (checkStaff && !checkStaff.is_fisso) {
+            const celleDipendente = document.querySelectorAll(`.placed[data-name="${name}"]`);
+            const giorniAssegnati = new Set();
+            celleDipendente.forEach(c => {
+                const pCell = c.closest('.cell');
+                if (pCell && pCell.dataset.cellId) {
+                    giorniAssegnati.add(pCell.dataset.cellId.split('-')[0]);
+                }
+            });
+            
+            if (giorniAssegnati.size >= 6 && !giorniAssegnati.has(giorno)) {
+                const conferma7 = confirm(`⚠️ ATTENZIONE LEGALE:\n\nIl dipendente ${name} è con contratto a CHIAMATA e sta per essere inserito per il 7° giorno in questa settimana.\nLe regole legali prevedono al massimo 6 giorni su 7 per i contratti a chiamata.\n\nVuoi davvero forzare l'inserimento?`);
+                if (!conferma7) return;
+            }
+        }
+
         let conflittoTrovato = false;
         let nomeTurnoConflitto = "";
         const celleDelGiorno = document.querySelectorAll(`.cell[data-cell-id^="${giorno}-"]`);
@@ -1263,7 +1295,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const nuovoElemento = createPlacedElement({ name });
         cellDiv.appendChild(nuovoElemento);
-        setTimeout(() => openTagModalForElement(nuovoElemento, name), 50);
+        
+        const shouldEnableTime = (window.currentConfig && window.currentConfig.enableTimeTags !== undefined) ? window.currentConfig.enableTimeTags : true;
+        if (shouldEnableTime) {
+            setTimeout(() => openTagModalForElement(nuovoElemento, name), 50);
+        }
+
         updateCellCounter(cellDiv);
 
         // ==========================================
@@ -2104,11 +2141,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('main')?.classList.remove('one-col-mode');
             }
 
+            const wizEnableTime = document.getElementById('wiz-enable-time');
+            const enableTimeTags = wizEnableTime ? wizEnableTime.checked : true;
+
             const configDaSalvare = { 
                 turni: newTurni, 
                 fasceOrarie: newFasce, 
                 repartiAzienda: newReparti,
-                layoutColonne: layoutColonne
+                layoutColonne: layoutColonne,
+                enableTimeTags: enableTimeTags
             };
             
             const { data: existingConfigs } = await supabaseClient

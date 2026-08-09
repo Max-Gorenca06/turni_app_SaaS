@@ -224,59 +224,68 @@
   </div>
 
   <!-- WIZARD SETUP -->
-  <div id="wizard-container" style="display:none; width: 100%; height: 100%; overflow: auto; background: #fff; padding: 40px; box-sizing: border-box; flex-direction: column; align-items: center;">
-    <div style="max-width: 600px; width: 100%; margin: 0 auto;">
-      <h1 id="wizard-title" style="color: #1f4e9a; text-align: center; margin-bottom: 10px;">Configurazione Attività</h1>
-      <p id="wizard-subtitle" style="text-align: center; color: #666; margin-bottom: 30px;">Compila i dettagli della tua attività (Bar, Ristorante, Negozio, ecc.).</p>
-
-      <div class="wizard-step" style="margin-bottom: 25px; padding: 25px; border: 1px solid #e0e0e0; border-radius: 12px; background: #fafafa; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
-        <h3 style="margin-top: 0; color: #333; display: flex; align-items: center; gap: 8px;"><span>🏠</span> 1. Nome dell'Attività</h3>
-        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">Inserisci il nome della tua attività.</p>
-        <input type="text" id="wiz-nome-azienda" placeholder="Es. Bar Centrale" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box;">
+  <div id="wizard-container" style="display:none; width: 100%; height: 100%; overflow: auto; background: #f1f5f9; padding: 40px; box-sizing: border-box; flex-direction: column; align-items: center;">
+    <div style="max-width: 800px; width: 100%; margin: 0 auto; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+      <div style="text-align: center; margin-bottom: 40px;">
+          <h1 id="wizard-title" style="color: #0f172a; margin-bottom: 10px; font-size: 28px;">Impostazioni Attività</h1>
+          <p id="wizard-subtitle" style="color: #64748b; font-size: 15px;">Configura i dettagli principali del tuo ristorante o locale.</p>
       </div>
 
-      <div class="wizard-step" style="margin-bottom: 25px; padding: 25px; border: 1px solid #e0e0e0; border-radius: 12px; background: #fafafa; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
-        <h3 style="margin-top: 0; color: #333; display: flex; align-items: center; gap: 8px;"><span>⏰</span> 2. Configura i Turni</h3>
-        <p style="font-size: 13px; color: #666; margin-bottom: 5px;">Quali turni ci sono durante la giornata?</p>
-        <p style="font-size: 12px; color: #888; margin-bottom: 15px; background: #eef; padding: 10px; border-radius: 6px;">
-          <strong>Regola:</strong> Scrivi <code>Nome del Turno : Fascia</code> (mattina, pranzo, o cena).<br>
-          <em>Premi Invio per andare a capo e aggiungere un nuovo turno.</em>
-        </p>
-        <textarea id="wiz-turni" rows="5" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 15px; font-family: monospace; box-sizing: border-box; line-height: 1.4;" placeholder="Es:
-Camere : mattina
-Cucina : pranzo
-Sala : pranzo
-Cucina : cena
-Sala : cena"></textarea>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px;">
+          <!-- 1. Nome -->
+          <div class="wizard-step" style="padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+            <h3 style="margin-top: 0; color: #1e293b; display: flex; align-items: center; gap: 8px; font-size: 16px;"><span>🏠</span> Nome Attività</h3>
+            <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Il nome pubblico del tuo locale.</p>
+            <input type="text" id="wiz-nome-azienda" placeholder="Es. Ristorante da Mario" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 15px; box-sizing: border-box; transition: all 0.2s;">
+          </div>
+
+          <!-- 4. Layout Colonne -->
+          <div class="wizard-step" style="padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+            <h3 style="margin-top: 0; color: #1e293b; display: flex; align-items: center; gap: 8px; font-size: 16px;"><span>📋</span> Layout Griglia</h3>
+            <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Larghezza blocchi del personale.</p>
+            <select id="wiz-col-mode" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 15px; box-sizing: border-box; background: white; cursor: pointer;">
+              <option value="2">A 2 Colonne (Consigliato, compatto)</option>
+              <option value="1">A 1 Colonna (Per nomi molto lunghi)</option>
+            </select>
+          </div>
       </div>
 
-      <div class="wizard-step" style="margin-bottom: 25px; padding: 25px; border: 1px solid #e0e0e0; border-radius: 12px; background: #fafafa; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
-        <h3 style="margin-top: 0; color: #333; display: flex; align-items: center; gap: 8px;"><span>👥</span> 3. Reparti del Personale</h3>
-        <p style="font-size: 13px; color: #666; margin-bottom: 5px;">In quali reparti lavorano i tuoi dipendenti?</p>
-        <p style="font-size: 12px; color: #888; margin-bottom: 15px; background: #eef; padding: 10px; border-radius: 6px;">
-          Scrivi un reparto per riga. (es. Sala, Cucina, Pizzeria)
-        </p>
-        <textarea id="wiz-reparti" rows="4" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 15px; font-family: monospace; box-sizing: border-box; line-height: 1.4;" placeholder="Es:
-Camere
-Cucina
-Sala"></textarea>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 24px;">
+          <!-- 2. Turni -->
+          <div class="wizard-step" style="padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+            <h3 style="margin-top: 0; color: #1e293b; display: flex; align-items: center; gap: 8px; font-size: 16px;"><span>⏰</span> Configura i Turni</h3>
+            <p style="font-size: 12px; color: #64748b; margin-bottom: 15px; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px dashed #cbd5e1;">
+              <strong>Regola:</strong> <code>Nome Turno : Fascia</code><br>
+              (es. <em>Camere : mattina</em>)
+            </p>
+            <textarea id="wiz-turni" rows="6" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 14px; font-family: monospace; box-sizing: border-box; line-height: 1.5;" placeholder="Camere : mattina&#10;Cucina : pranzo&#10;Sala : pranzo"></textarea>
+          </div>
+
+          <!-- 3. Reparti -->
+          <div class="wizard-step" style="padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
+            <h3 style="margin-top: 0; color: #1e293b; display: flex; align-items: center; gap: 8px; font-size: 16px;"><span>👥</span> Reparti Personale</h3>
+            <p style="font-size: 12px; color: #64748b; margin-bottom: 15px; background: #f8fafc; padding: 10px; border-radius: 8px; border: 1px dashed #cbd5e1;">
+              Scrivi un reparto per riga.<br> (es. <em>Sala, Cucina, Pizzeria</em>)
+            </p>
+            <textarea id="wiz-reparti" rows="6" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 14px; font-family: monospace; box-sizing: border-box; line-height: 1.5;" placeholder="Camere&#10;Cucina&#10;Sala"></textarea>
+          </div>
       </div>
 
-      <div class="wizard-step" style="margin-bottom: 25px; padding: 25px; border: 1px solid #e0e0e0; border-radius: 12px; background: #fafafa; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
-        <h3 style="margin-top: 0; color: #333; display: flex; align-items: center; gap: 8px;"><span>📋</span> 4. Layout Colonne Griglia</h3>
-        <p style="font-size: 13px; color: #666; margin-bottom: 5px;">Scegli la larghezza dei nomi del personale nella griglia dei turni.</p>
-        <p style="font-size: 12px; color: #888; margin-bottom: 12px; background: #eef; padding: 10px; border-radius: 6px;">
-          Seleziona se visualizzare gli elementi a <strong>2 colonne</strong> (affiancati, consigliato per molti dipendenti) oppure a <strong>1 colonna</strong> (occupano l'intera larghezza, consigliato per nomi lunghi o pochi dipendenti).
-        </p>
-        <select id="wiz-col-mode" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; box-sizing: border-box; background: white;">
-          <option value="2">Layout a 2 Colonne (Predefinito)</option>
-          <option value="1">Layout a 1 Colonna (Intera larghezza)</option>
-        </select>
+      <!-- 5. Advanced / Time Slots -->
+      <div class="wizard-step" style="padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-bottom: 30px;">
+        <h3 style="margin-top: 0; color: #1e293b; display: flex; align-items: center; gap: 8px; font-size: 16px;"><span>⚙️</span> Impostazioni Avanzate</h3>
+        <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 10px 0;">
+            <div>
+                <div style="font-size: 15px; font-weight: 500; color: #334155;">Richiedi Orario Automaticamente</div>
+                <div style="font-size: 13px; color: #64748b; margin-top: 4px;">Apre in automatico la striscia per la fascia oraria ogni volta che assegni un turno.</div>
+            </div>
+            <div>
+                <input type="checkbox" id="wiz-enable-time" style="width: 22px; height: 22px; cursor: pointer;">
+            </div>
+        </label>
       </div>
 
-      
-
-      <button id="wiz-btn-genera" class="btn" style="background: #28a745; width: 100%; padding: 15px; font-size: 18px; border: none; border-radius: 5px; cursor: pointer; color: white; font-weight: bold;">Genera Ambiente di Lavoro 🚀</button>
+      <button id="wiz-btn-genera" class="btn" style="background: #2563eb; width: 100%; padding: 16px; font-size: 16px; border: none; border-radius: 12px; cursor: pointer; color: white; font-weight: 600; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">Salva Configurazione 🚀</button>
     </div>
   </div>
 
