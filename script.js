@@ -411,9 +411,53 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (currentAziendaId) {
             await loadState();
+            applyAdminModules();
         }
 
         if(spinner) spinner.style.display = 'none';
+    }
+
+    function applyAdminModules() {
+        if (!currentAziendaId || !window._lastAziendeList) return;
+        const az = window._lastAziendeList.find(a => a.id === currentAziendaId);
+        if (!az) return;
+
+        const moduli = az.moduli_attivi || {
+            mod_timbratore: true,
+            mod_assenze: true,
+            mod_compliance_legale: false,
+            mod_notifiche_push: false,
+            mod_export_payroll: false,
+            mod_statistiche: true,
+            mod_clonazione: true
+        };
+
+        // Assenze
+        const absBtn = document.getElementById('open-absences-btn');
+        const bell = document.getElementById('notification-bell');
+        if (absBtn) absBtn.style.display = moduli.mod_assenze ? 'inline-block' : 'none';
+        if (bell) bell.style.display = moduli.mod_assenze ? 'flex' : 'none';
+
+        // Export CSV/Payroll/PDF
+        const exportCsvBtn = document.getElementById('export-csv-btn');
+        const importCsvBtn = document.getElementById('import-csv-btn');
+        const exportPdfBtn = document.getElementById('export-pdf-btn');
+        if (exportCsvBtn) exportCsvBtn.style.display = moduli.mod_export_payroll ? 'inline-block' : 'none';
+        if (importCsvBtn) importCsvBtn.style.display = moduli.mod_export_payroll ? 'inline-block' : 'none';
+        if (exportPdfBtn) exportPdfBtn.style.display = moduli.mod_export_payroll ? 'inline-block' : 'none';
+
+        // Statistiche
+        const statsBtn = document.getElementById('btn-open-global-stats');
+        if (statsBtn) statsBtn.style.display = moduli.mod_statistiche ? 'inline-block' : 'none';
+
+        // Clonazione
+        const copyPrevBtn = document.getElementById('copyPrevBtn');
+        const cloneWeekBtn = document.getElementById('clone-week-btn');
+        if (copyPrevBtn) copyPrevBtn.style.display = moduli.mod_clonazione ? 'inline-block' : 'none';
+        if (cloneWeekBtn) cloneWeekBtn.style.display = moduli.mod_clonazione ? 'inline-block' : 'none';
+
+        // Salviamo in globale così altre funzioni (es. compliance 7gg) possono leggerlo
+        window.currentAziendaModuli = moduli;
     }
 
 

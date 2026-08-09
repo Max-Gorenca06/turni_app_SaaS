@@ -1,4 +1,4 @@
-const CACHE_NAME = 'turni-boschetto-v22';
+const CACHE_NAME = 'turni-boschetto-v23';
 const urlsToCache = [
   './',
   './index.html',
@@ -25,7 +25,7 @@ self.addEventListener('install', event => {
 // Intercettazione: usa i file salvati o scaricali (solo richieste GET dello stesso origin)
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
-  
+
   // Ignora le richieste a Supabase o altri domini esterni per evitare problemi di CORS o di rete
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) return;
@@ -43,7 +43,7 @@ self.addEventListener('fetch', event => {
 // Pulizia: elimina le vecchie versioni e PRENDI IL CONTROLLO
 self.addEventListener('activate', event => {
   event.waitUntil(clients.claim()); // <--- LA MAGIA 2: Prendi immediatamente il controllo della pagina aperta
-  
+
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
     caches.keys().then(cacheNames => {
@@ -55,53 +55,6 @@ self.addEventListener('activate', event => {
           }
         })
       );
-    })
-  );
-});
-
-// --- PUSH NOTIFICATIONS ---
-self.addEventListener('push', event => {
-  let data = { title: 'Nuovo Avviso', body: 'Controlla l\'app per le novità sui tuoi turni.', url: '/' };
-  
-  if (event.data) {
-    try {
-      data = event.data.json();
-    } catch(e) {
-      data.body = event.data.text();
-    }
-  }
-
-  const options = {
-    body: data.body,
-    icon: './manifest-icon-192.maskable.png', // Se hai l'icona
-    badge: './manifest-icon-192.maskable.png',
-    vibrate: [100, 50, 100],
-    data: { url: data.url || '/app_dipendente.html' }
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(data.title, options)
-  );
-});
-
-self.addEventListener('notificationclick', event => {
-  event.notification.close();
-  
-  const urlToOpen = event.notification.data.url;
-  
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-      // Check if there is already a window/tab open with the target URL
-      for (let i = 0; i < windowClients.length; i++) {
-        const client = windowClients[i];
-        if (client.url.includes('app_dipendente.html') && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      // If not, open a new window
-      if (clients.openWindow) {
-        return clients.openWindow(urlToOpen);
-      }
     })
   );
 });

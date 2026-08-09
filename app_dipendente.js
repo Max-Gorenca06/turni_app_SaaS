@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Fallback di compatibilità per tabelle tradizionali
                 const { data: directData, error: directError } = await supabaseClient
                     .from('staff')
-                    .select('*, aziende(nome_ristorante)')
+                    .select('*, aziende(nome_ristorante, moduli_attivi)')
                     .eq('email', email)
                     .eq('password', password);
                 
@@ -117,6 +117,44 @@ function showApp() {
         if (p.azienda_id === currentProfile.azienda_id) opt.selected = true;
         select.appendChild(opt);
     });
+
+    applyModules();
+}
+
+async function applyModules() {
+    let moduli = {
+        mod_timbratore: true,
+        mod_assenze: true,
+        mod_notifiche_push: false
+    };
+
+    if (currentProfile && currentProfile.azienda_id) {
+        // Fetch di sicurezza se la RPC di login non ha caricato i moduli
+        const { data: azData } = await supabaseClient
+            .from('aziende')
+            .select('moduli_attivi')
+            .eq('id', currentProfile.azienda_id)
+            .single();
+            
+        if (azData && azData.moduli_attivi) {
+            moduli = azData.moduli_attivi;
+        } else if (currentProfile.aziende && currentProfile.aziende.moduli_attivi) {
+            moduli = currentProfile.aziende.moduli_attivi;
+        }
+    }
+
+    // Toggle Timbratore
+    const navTimbratore = document.getElementById('nav-timbratore');
+    if (navTimbratore) navTimbratore.style.display = moduli.mod_timbratore ? 'flex' : 'none';
+
+    // Toggle Assenze
+    const navRichieste = document.getElementById('nav-richieste');
+    if (navRichieste) navRichieste.style.display = moduli.mod_assenze ? 'flex' : 'none';
+
+    // Toggle Push
+    const pushCard = document.getElementById('mod-notifiche-card');
+    if (pushCard) pushCard.style.display = moduli.mod_notifiche_push ? 'block' : 'none';
+}
 
     updateProfileView();
 }
