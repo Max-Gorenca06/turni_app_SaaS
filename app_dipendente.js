@@ -471,3 +471,93 @@ async function loadAbsences() {
         console.error(e);
     }
 }
+
+// --- PUSH NOTIFICATIONS ---
+const PUBLIC_VAPID_KEY = 'BLAvFrPhZKkFEPt_3FAdMcPFB8aCYoF1TiJ354yaVzVuxHOcq_g6IHECTONm4j4fOBiLX4pwKy1ObLjKAjcYQE4';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const pushBtn = document.getElementById('push-btn');
+    if (pushBtn) {
+        pushBtn.addEventListener('click', subscribeToPush);
+    }
+    checkPushStatus();
+});
+
+async function checkPushStatus() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    
+    const btn = document.getElementById('push-btn');
+    const status = document.getElementById('push-status');
+    
+    if (subscription) {
+        btn.textContent = 'Notifiche Attive ✓';
+        btn.style.background = '#10b981';
+        btn.disabled = true;
+        status.textContent = 'Il tuo dispositivo riceverà gli avvisi.';
+        status.style.display = 'block';
+        status.style.color = '#10b981';
+    }
+}
+
+async function subscribeToPush() {
+    const btn = document.getElementById('push-btn');
+    const status = document.getElementById('push-status');
+    
+    btn.textContent = 'Attivazione...';
+    btn.disabled = true;
+    status.style.display = 'block';
+    status.textContent = 'Richiesta permessi in corso...';
+    status.style.color = '#64748b';
+
+    try {
+        if (!('serviceWorker' in navigator)) throw new Error('Service Worker non supportato');
+        
+        const registration = await navigator.serviceWorker.ready;
+        
+        const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+        });
+
+        // Save to Supabase
+        const { error } = await supabaseClient.from('push_subscriptions').insert([{
+            azienda_id: currentProfile.azienda_id,
+            nome_dipendente: currentProfile.name,
+            subscription: subscription
+        }]);
+
+        if (error) throw error;
+
+        btn.textContent = 'Notifiche Attive ✓';
+        btn.style.background = '#10b981';
+        status.textContent = 'Iscrizione completata con successo!';
+        status.style.color = '#10b981';
+    } catch (e) {
+        console.error('Errore Push:', e);
+        btn.textContent = 'Riprova';
+        btn.disabled = false;
+        btn.style.background = '#ef4444';
+        status.textContent = e.message === 'Service Worker non supportato' 
+            ? 'Il tuo browser non supporta le notifiche push.' 
+            : 'Devi consentire le notifiche nel popup del browser.';
+        status.style.color = '#ef4444';
+    }
+}
+

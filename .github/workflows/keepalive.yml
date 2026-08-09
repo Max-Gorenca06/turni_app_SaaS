@@ -1,0 +1,18 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # Esegue lo script ogni 3 giorni alle 04:00 AM UTC
+    - cron: '0 4 */3 * *'
+  workflow_dispatch: # Permette di avviarlo manualmente
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send API request to Supabase
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" -X GET "https://mrwjqeachzcmnwahnqjn.supabase.co/rest/v1/aziende?select=id&limit=1" \
+          -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ" \
+          -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ"
+          echo "Ping a Supabase effettuato con successo!"
