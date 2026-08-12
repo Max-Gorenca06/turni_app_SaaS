@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crea Account SuperAdmin</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .box { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #10b981; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        #status { margin-top: 15px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>🔑 Crea Profilo SuperAdmin</h2>
+        <p style="font-size: 14px; color: #64748b;">Inserisci un'email e una password per creare il tuo account SuperAdmin in Supabase.</p>
+        
+        <input type="email" id="email" placeholder="Email SuperAdmin">
+        <input type="password" id="password" placeholder="Password Sicura">
+        <button onclick="createAdmin()">Crea Account</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        async function createAdmin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const status = document.getElementById('status');
+            
+            if(!email || !password) {
+                status.style.color = 'red';
+                status.textContent = 'Inserisci email e password!';
+                return;
+            }
+
+            status.style.color = '#3b82f6';
+            status.textContent = 'Creazione in corso...';
+
+            const { data, error } = await supabaseClient.auth.signUp({
+                email: email,
+                password: password
+            });
+
+            if (error) {
+                status.style.color = 'red';
+                status.textContent = 'Errore: ' + error.message;
+            } else {
+                status.style.color = '#10b981';
+                status.innerHTML = `Account creato con successo!<br><br>
+                Copia questo ID per incollarlo nell'SQL Editor:<br>
+                <code style="background:#f1f5f9; padding:5px; border-radius:4px; display:block; margin-top:10px; font-size:12px; word-break: break-all; color:#0f172a;">${data.user.id}</code>`;
+            }
+        }
+    </script>
+</body>
+</html>
