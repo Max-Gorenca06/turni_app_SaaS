@@ -4,26 +4,34 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const SUPERADMIN_PASSWORD = 'ares'; // Password hardcoded per test (da cambiare in prod!)
-
-document.addEventListener('DOMContentLoaded', () => {
-    if(sessionStorage.getItem('saas_superadmin_logged_in') === 'true') {
+document.addEventListener('DOMContentLoaded', async () => {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if(session) {
         showDashboard();
     }
 });
 
-function loginSuperAdmin() {
+async function loginSuperAdmin() {
+    const email = document.getElementById('sa-email').value;
     const pwd = document.getElementById('sa-password').value;
-    if(pwd === SUPERADMIN_PASSWORD) {
-        sessionStorage.setItem('saas_superadmin_logged_in', 'true');
-        showDashboard();
-    } else {
+    
+    document.getElementById('sa-error').style.display = 'none';
+    
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: email,
+        password: pwd
+    });
+    
+    if(error) {
+        document.getElementById('sa-error').textContent = error.message;
         document.getElementById('sa-error').style.display = 'block';
+    } else {
+        showDashboard();
     }
 }
 
-function logout() {
-    sessionStorage.removeItem('saas_superadmin_logged_in');
+async function logout() {
+    await supabaseClient.auth.signOut();
     window.location.reload();
 }
 
@@ -118,14 +126,18 @@ window.updateModule = async function(aziendaId, moduleKey, newValue) {
     moduli[moduleKey] = newValue;
 
     // Aggiorniamo
-    const { error: updateError } = await supabaseClient
+    const { data: updateData, error: updateError } = await supabaseClient
         .from('aziende')
         .update({ moduli_attivi: moduli })
-        .eq('id', aziendaId);
+        .eq('id', aziendaId)
+        .select();
 
     if (updateError) {
         alert('Errore salvataggio: ' + updateError.message);
         loadAziende(); // ricarica per ripristinare il toggle visivo
+    } else if (!updateData || updateData.length === 0) {
+        alert('Errore: Permessi insufficienti per modificare questa azienda. Assicurati di aver fatto l\'accesso con l\'account proprietario.');
+        loadAziende();
     } else {
         console.log(`Aggiornato ${moduleKey} a ${newValue} per l'azienda ${aziendaId}`);
         showToast("Salvataggio completato! ✅");

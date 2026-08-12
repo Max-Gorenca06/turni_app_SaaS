@@ -146,10 +146,11 @@
     <div id="auth-overlay" class="auth-overlay">
         <div class="auth-box">
             <h2>Accesso SuperAdmin</h2>
-            <p style="color:#64748b; font-size:14px;">Area riservata gestione SaaS</p>
-            <input type="password" id="sa-password" placeholder="Password SuperAdmin">
+            <p style="color:#64748b; font-size:14px;">Accedi con il tuo account Supabase</p>
+            <input type="email" id="sa-email" placeholder="Email (es. amministratore@...)">
+            <input type="password" id="sa-password" placeholder="Password">
             <button onclick="loginSuperAdmin()">Accedi</button>
-            <p id="sa-error" style="color:red; display:none; margin-top:10px;">Password errata</p>
+            <p id="sa-error" style="color:red; display:none; margin-top:10px;">Credenziali errate</p>
         </div>
     </div>
 
