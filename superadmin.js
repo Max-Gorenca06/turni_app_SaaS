@@ -128,5 +128,32 @@ window.updateModule = async function(aziendaId, moduleKey, newValue) {
         loadAziende(); // ricarica per ripristinare il toggle visivo
     } else {
         console.log(`Aggiornato ${moduleKey} a ${newValue} per l'azienda ${aziendaId}`);
+        showToast("Salvataggio completato! ✅");
     }
+}
+
+function showToast(message) {
+    let toast = document.getElementById('superadmin-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'superadmin-toast';
+        toast.style.position = 'fixed';
+        toast.style.bottom = '20px';
+        toast.style.right = '20px';
+        toast.style.background = '#10b981';
+        toast.style.color = 'white';
+        toast.style.padding = '12px 24px';
+        toast.style.borderRadius = '8px';
+        toast.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+        toast.style.fontWeight = 'bold';
+        toast.style.zIndex = '9999';
+        toast.style.transition = 'opacity 0.3s';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.style.opacity = '1';
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+    }, 2500);
 }
