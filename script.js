@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let aziendeList = [];
                 if (window.TurniAuth && typeof window.TurniAuth.fetchUserAziende === 'function') {
                     const res = await window.TurniAuth.fetchUserAziende(session.user.id);
-                    aziendeList = res.aziende || [];
+                    aziendeList = Array.isArray(res) ? res : (res?.aziende || []);
                 } else {
                     const { data } = await window.supabaseClient.rpc('get_my_aziende');
                     aziendeList = data || [];
