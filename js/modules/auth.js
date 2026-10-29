@@ -88,12 +88,22 @@ export async function logoutUser() {
     }
 }
 
+export async function sendPasswordReset(email) {
+    const supabaseClient = getSupabaseClient();
+    if (!supabaseClient) throw new Error("Supabase non disponibile");
+    const redirectTo = window.location.origin + window.location.pathname;
+    const { data, error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+    return data;
+}
+
 if (typeof window !== 'undefined') {
     window.TurniAuth = {
         checkLoginState,
         fetchUserAziende,
         loginUser,
         registerUser,
-        logoutUser
+        logoutUser,
+        sendPasswordReset
     };
 }

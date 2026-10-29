@@ -2139,6 +2139,53 @@ document.addEventListener('DOMContentLoaded', () => {
             const p = document.getElementById('auth-password').value;
             effettuaRegistrazione(e, p);
         });
+
+        document.getElementById('btn-auth-reset')?.addEventListener('click', async () => {
+            const emailInput = document.getElementById('auth-email');
+            const msgEl = document.getElementById('auth-message');
+            const email = (emailInput?.value || prompt("Inserisci l'email del tuo account per ricevere il link di recupero password:") || '').trim();
+            if (!email) {
+                if (msgEl) {
+                    msgEl.style.color = '#ef4444';
+                    msgEl.textContent = "Inserisci prima la tua email nel campo Email.";
+                }
+                return;
+            }
+            try {
+                if (msgEl) {
+                    msgEl.style.color = '#64748b';
+                    msgEl.textContent = "Invio email di recupero in corso...";
+                }
+                const redirectTo = window.location.origin + window.location.pathname;
+                const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+                if (error) throw error;
+                if (msgEl) {
+                    msgEl.style.color = '#10b981';
+                    msgEl.textContent = "✅ Email di recupero inviata! Controlla la tua casella di posta.";
+                }
+            } catch (err) {
+                if (msgEl) {
+                    msgEl.style.color = '#ef4444';
+                    msgEl.textContent = "Errore invio email: " + (err.message || err);
+                }
+            }
+        });
+
+        if (supabaseClient && supabaseClient.auth) {
+            supabaseClient.auth.onAuthStateChange(async (event) => {
+                if (event === 'PASSWORD_RECOVERY') {
+                    const newPassword = prompt("🔑 Recupero Password\nInserisci la tua nuova password (minimo 6 caratteri):");
+                    if (newPassword && newPassword.trim().length >= 6) {
+                        const { error } = await supabaseClient.auth.updateUser({ password: newPassword.trim() });
+                        if (error) {
+                            alert("Errore aggiornamento password: " + error.message);
+                        } else {
+                            alert("✅ Password aggiornata con successo!");
+                        }
+                    }
+                }
+            });
+        }
         
         document.getElementById('btn-logout')?.addEventListener('click', effettuaLogout);
         document.getElementById('btn-support')?.addEventListener('click', () => {
