@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let aziendeList = [];
                 if (window.TurniAuth && typeof window.TurniAuth.fetchUserAziende === 'function') {
                     const res = await window.TurniAuth.fetchUserAziende(session.user.id);
-                    aziendeList = res.aziende || [];
+                    aziendeList = Array.isArray(res) ? res : (res?.aziende || []);
                 } else {
                     const { data } = await window.supabaseClient.rpc('get_my_aziende');
                     aziendeList = data || [];
@@ -198,8 +198,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         <p style="font-size:12px; color:#64748b; margin-top:0; margin-bottom: 20px;">ID: ${az.id.substring(0, 8)}...</p>
                     </div>
-                    <div style="display: flex; gap: 10px;">
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                         <button class="btn open-azienda-btn" style="flex: 1; padding: 10px; font-size: 13px; background: #3b82f6; border-radius: 6px;">Apri Turni</button>
+                        <a href="app_dipendente.html" target="_blank" class="btn open-emp-app-btn" onclick="event.stopPropagation();" style="padding: 10px 12px; font-size: 13px; background: #10b981; color: white; text-decoration: none; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center;" title="Apri App Dipendenti">📱 App</a>
                         <button class="btn secondary edit-azienda-btn" style="padding: 10px; font-size: 13px; border-radius: 6px;" data-id="${az.id}">⚙️</button>
                     </div>
                 `;
