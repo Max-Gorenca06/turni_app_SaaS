@@ -6,13 +6,19 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const password = 'mysku3-hafPaz-kyzpyv';
-const projectRef = 'mrwjqeachzcmnwahnqjn';
-const sqlFilePath = path.join(__dirname, 'combined_migration.sql');
+const password = process.env.DB_PASSWORD;
+const projectRef = process.env.SUPABASE_PROJECT_REF || 'mrwjqeachzcmnwahnqjn';
+const dbHost = process.env.DB_HOST || `db.${projectRef}.supabase.co`;
+const sqlFilePath = path.join(__dirname, process.argv[2] || 'combined_migration.sql');
 const sqlQuery = fs.readFileSync(sqlFilePath, 'utf8');
 
+if (!password) {
+    console.error("❌ Errore: Imposta la variabile d'ambiente DB_PASSWORD prima di eseguire lo script.");
+    process.exit(1);
+}
+
 const targets = [
-    { host: `db.${projectRef}.supabase.co`, port: 5432, user: `postgres` }
+    { host: dbHost, port: Number(process.env.DB_PORT || 5432), user: process.env.DB_USER || 'postgres' }
 ];
 
 async function run() {

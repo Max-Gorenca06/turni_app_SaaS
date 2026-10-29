@@ -54,7 +54,10 @@
     </div>
 </div>
 
-<script>
+<script type="module">
+    import { SUPABASE_CONFIG, getSupabaseClient } from './js/config.js';
+    import { notifyAdminNewAbsence } from './js/modules/notifications.js';
+
     // 1. LEGGE L'ID DEL RISTORANTE DALL'URL
     const urlParams = new URLSearchParams(window.location.search);
     const aziendaId = urlParams.get('id');
@@ -64,18 +67,25 @@
     } else {
         document.getElementById('form-content').style.display = 'block';
 
-        const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co'; // <--- LE TUE CHIAVI VECCHIE (O SAAS SE LE HAI CAMBIATE)
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const supabaseClient = getSupabaseClient() || supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
 
         async function caricaDati() {
-            // 2. IL FILTRO SAAS: Carica solo i nomi di QUESTA azienda
-            const { data: staffData } = await supabaseClient.from('staff').select('name').eq('azienda_id', aziendaId).order('name');
+            // 2. IL FILTRO SAAS: Carica solo i nomi di QUESTA azienda tramite RPC sicura
+            let { data: staffData, error: staffErr } = await supabaseClient.rpc('get_public_staff_names', { p_azienda_id: aziendaId });
+            if (staffErr && staffErr.code === 'PGRST202') {
+                const fallback = await supabaseClient.from('staff').select('name').eq('azienda_id', aziendaId).order('name');
+                staffData = fallback.data;
+            }
             const selectNome = document.getElementById('nome');
             selectNome.innerHTML = '<option value="" disabled selected>Scegli il tuo nome...</option>';
             
             if (staffData) {
-                staffData.forEach(p => { selectNome.innerHTML += `<option value="${p.name}">${p.name}</option>`; });
+                staffData.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.name;
+                    opt.textContent = p.name;
+                    selectNome.appendChild(opt);
+                });
             } else {
                 selectNome.innerHTML = '<option value="" disabled>Errore di connessione</option>';
             }
@@ -139,6 +149,13 @@
             if (error) {
                 msgDiv.style.color = "red"; msgDiv.textContent = "Errore di connessione. Riprova."; console.error(error);
             } else {
+                notifyAdminNewAbsence({
+                    aziendaId,
+                    nomeDipendente: nome,
+                    dataInizio,
+                    dataFine,
+                    turno
+                });
                 msgDiv.style.color = "green"; msgDiv.textContent = "✅ Richiesta inviata con successo! Puoi chiudere.";
                 document.getElementById('data-inizio').value = ''; document.getElementById('data-fine').value = ''; document.getElementById('motivo').value = '';
             }

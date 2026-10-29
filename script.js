@@ -39,20 +39,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }, { passive: false });
     // --- FINE FIX APPLE ---
   
-    // ⚠️ INSERISCI QUI LE CHIAVI DEL NUOVO PROGETTO SUPABASE SAAS ⚠️
-    const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co';
-    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
+    // Configurazione centralizzata da js/config.js (con fallback)
+    const SUPABASE_URL = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.URL) || 'https://api.158.180.239.147.sslip.io';
+    const SUPABASE_ANON_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.ANON_KEY) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxNDQ4MTcwLCJleHAiOjIxMDY4MDgxNzB9.v6w9RwQBBKxdC0-sN08whXB0NjRbWgy_tCzuX_piuWk';
     
-    window.supabaseClient = null;
-    let supabaseClient = null;
-    if (typeof supabase !== 'undefined') {
+    window.supabaseClient = (window.getSupabaseClient && window.getSupabaseClient()) || null;
+    let supabaseClient = window.supabaseClient;
+    if (!supabaseClient && typeof supabase !== 'undefined') {
         try {
             supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
             window.supabaseClient = supabaseClient;
         } catch (err) {
             console.error("Errore inizializzazione Supabase client:", err);
         }
-    } else {
+    } else if (!supabaseClient) {
         console.warn("Libreria Supabase non trovata globale.");
     }
 
@@ -96,20 +96,21 @@ document.addEventListener('DOMContentLoaded', () => {
             isLoggedIn = !!session; 
             
             if (isLoggedIn) {
-                
-                // Fetch user profile
-                const { data: prof, error } = await window.supabaseClient.from('profili').select('azienda_id, ruolo').eq('id', session.user.id).single();
-                
-                
-                isAdmin = true; 
-                const { data: aziendeList } = await window.supabaseClient.from('aziende').select('*');
+                isAdmin = true;
+                let aziendeList = [];
+                if (window.TurniAuth && typeof window.TurniAuth.fetchUserAziende === 'function') {
+                    const res = await window.TurniAuth.fetchUserAziende(session.user.id);
+                    aziendeList = res.aziende || [];
+                } else {
+                    const { data } = await window.supabaseClient.rpc('get_my_aziende');
+                    aziendeList = data || [];
+                }
+
                 if (aziendeList && aziendeList.length > 0) {
                     mostraDashboard(aziendeList);
                 } else {
                     mostraWizard();
                 }
-
-
             } else {
                 const urlParams = new URLSearchParams(window.location.search);
                 currentAziendaId = urlParams.get('id') || urlParams.get('azienda_id');
@@ -216,7 +217,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentAziendaId = az.id;
                     const sessionResp = await supabaseClient.auth.getSession();
                     if (sessionResp.data && sessionResp.data.session && sessionResp.data.session.user) {
-                        await window.supabaseClient.from('profili').upsert({ id: sessionResp.data.session.user.id, azienda_id: az.id });
+                        await window.supabaseClient.from('profili').upsert(
+                            { id: sessionResp.data.session.user.id, azienda_id: az.id },
+                            { onConflict: 'id,azienda_id' }
+                        );
                     }
                     avviaWorkspace();
                 });
@@ -293,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('wiz-nome-azienda').value = '';
             
             // Pre-fill da una configurazione esistente
-            const { data: existingConfigs } = await window.supabaseClient.from('griglie_turni').select('dati_griglia').limit(1);
+            const { data: existingConfigs } = await window.supabaseClient.from('griglie_turni').select('dati_griglia').eq('data_lunedi', '1970-01-01').limit(1);
             if (existingConfigs && existingConfigs.length > 0) {
                 const config = typeof existingConfigs[0].dati_griglia === 'string' ? JSON.parse(existingConfigs[0].dati_griglia) : existingConfigs[0].dati_griglia;
                 if (config.turni && config.fasceOrarie) {
@@ -412,6 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentAziendaId) {
             await loadState();
             applyAdminModules();
+            setupAdminRealtime();
         }
 
         if(spinner) spinner.style.display = 'none';
@@ -691,8 +696,29 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return;
         }
-        // La RLS di Supabase filtrerà in automatico solo lo staff del nostro azienda_id
-        const { data, error } = await window.supabaseClient.from('staff').select('*').order('name');
+        // Filtra sempre per currentAziendaId e usa RPC sicura se non autenticato
+        let data = null;
+        let error = null;
+        if (!currentAziendaId) {
+            staff = [];
+            window.staffData = staff;
+            return staff;
+        }
+        if (isLoggedIn) {
+            const res = await window.supabaseClient.from('staff').select('*').eq('azienda_id', currentAziendaId).order('name');
+            data = res.data;
+            error = res.error;
+        } else {
+            const rpcRes = await window.supabaseClient.rpc('get_public_staff_names', { p_azienda_id: currentAziendaId });
+            if (rpcRes.error && rpcRes.error.code === 'PGRST202') {
+                const fbRes = await window.supabaseClient.from('staff').select('id, name, reparto, is_fisso, fa_camere, maxshifts').eq('azienda_id', currentAziendaId).order('name');
+                data = fbRes.data;
+                error = fbRes.error;
+            } else {
+                data = rpcRes.data;
+                error = rpcRes.error;
+            }
+        }
         
         if (error) {
             console.error("Errore di rete durante il caricamento staff:", error);
@@ -713,6 +739,8 @@ document.addEventListener('DOMContentLoaded', () => {
             localStorage.setItem('staff_backup', JSON.stringify(staff));
             isOffline = false;
         }
+        window.staffData = staff;
+        return staff;
     }
 
     // --- CARICAMENTO GRIGLIA SAAS ---
@@ -808,6 +836,18 @@ document.addEventListener('DOMContentLoaded', () => {
             window.assenzeGlobali = {};
             window.assenzeGlobaliRaw = data || [];
 
+            // Aggiorna il badge numerico sulla campanella (#bell-badge) con il numero di richieste IN ATTESA
+            const pendingCount = (data || []).filter(a => a.stato === 'IN ATTESA').length;
+            const bellBadge = document.getElementById('bell-badge');
+            if (bellBadge) {
+                if (pendingCount > 0) {
+                    bellBadge.textContent = pendingCount > 9 ? '9+' : String(pendingCount);
+                    bellBadge.style.display = 'flex';
+                } else {
+                    bellBadge.style.display = 'none';
+                }
+            }
+
             (data || []).forEach(assenza => {
                 const start = new Date(assenza.data_inizio);
                 const end = new Date(assenza.data_fine);
@@ -900,14 +940,66 @@ document.addEventListener('DOMContentLoaded', () => {
         list.innerHTML = html;
     }
 
+    let adminRealtimeChannel = null;
+    function setupAdminRealtime() {
+        if (!supabaseClient || !currentAziendaId) return;
+        if (adminRealtimeChannel) {
+            supabaseClient.removeChannel(adminRealtimeChannel);
+        }
+
+        adminRealtimeChannel = supabaseClient
+            .channel('admin-channel-' + currentAziendaId)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'assenze_globali',
+                    filter: `azienda_id=eq.${currentAziendaId}`
+                },
+                async (payload) => {
+                    const nuova = payload.new;
+                    await caricaAssenzeGlobali();
+                    if (typeof renderAbsencesList === 'function') renderAbsencesList();
+                    generateGrid();
+                    if (nuova && nuova.stato === 'IN ATTESA') {
+                        const msg = `🔔 Nuova richiesta di assenza da ${nuova.nome_dipendente}`;
+                        showToast(msg);
+                        if (window.TurniNotifications && window.TurniNotifications.triggerLocalOSNotification) {
+                            window.TurniNotifications.triggerLocalOSNotification('Nuova Richiesta Assenza', msg, './index.html');
+                        }
+                    }
+                }
+            )
+            .subscribe();
+    }
+
     window.gestisciAssenza = async function(id, nuovoStato) {
         if (!confirm(`Vuoi davvero segnare questa richiesta come ${nuovoStato}?`)) return;
         try {
-            const { error } = await supabaseClient.from('assenze_globali').update({ stato: nuovoStato }).eq('id', id);
+            const targetAbs = (window.assenzeGlobaliRaw || []).find(a => String(a.id) === String(id));
+            const { error } = await supabaseClient.from('assenze_globali').update({ stato: nuovoStato }).eq('id', id).eq('azienda_id', currentAziendaId);
             if (error) throw error;
+
+            // Invia notifica in-app e Web Push al dipendente interessato
+            if (targetAbs && window.TurniNotifications && window.TurniNotifications.notifyEmployees) {
+                const inizioStr = new Date(targetAbs.data_inizio).toLocaleDateString('it-IT');
+                const fineStr = new Date(targetAbs.data_fine).toLocaleDateString('it-IT');
+                const dateStr = targetAbs.data_inizio === targetAbs.data_fine ? inizioStr : `${inizioStr} - ${fineStr}`;
+                const isApproved = nuovoStato === 'APPROVATA';
+                window.TurniNotifications.notifyEmployees({
+                    aziendaId: currentAziendaId,
+                    destinatario: targetAbs.nome_dipendente,
+                    titolo: isApproved ? '✅ Richiesta Approvata' : '❌ Richiesta Rifiutata',
+                    messaggio: `La tua richiesta (${targetAbs.turno_specifico}) per ${dateStr} è stata ${nuovoStato.toLowerCase()}.`,
+                    tipo: isApproved ? 'assenza_approvata' : 'assenza_rifiutata'
+                });
+            }
+
             await caricaAssenzeGlobali();
             renderAbsencesList();
             generateGrid(); 
+            showToast(`Richiesta ${nuovoStato.toLowerCase()} e notifica inviata!`);
         } catch (e) {
             console.error(e);
             alert("Errore nell'aggiornamento dell'assenza.");
@@ -917,7 +1009,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.eliminaAssenza = async function(id) {
         if (!confirm('Vuoi davvero eliminare questa assenza dal database?')) return;
         try {
-            const { error } = await supabaseClient.from('assenze_globali').delete().eq('id', id);
+            const { error } = await supabaseClient.from('assenze_globali').delete().eq('id', id).eq('azienda_id', currentAziendaId);
             if (error) throw error;
             await caricaAssenzeGlobali();
             renderAbsencesList();
@@ -1435,85 +1527,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- FUNZIONE UNIFICATA STAMPA / PDF ---
+    // --- FUNZIONE UNIFICATA STAMPA / PDF (delegata a js/modules/export.js) ---
     async function gestisciEsportazione(azione) {
-        const element = document.getElementById('main');
-        const originalTitle = document.title;
-        
-        let customName = elements.tableHeaderTitle.value.trim() || "Turni";
-        customName = customName.replace(/\//g, '-');
-        const finalFilename = `${customName}.pdf`;
-        
-        showToast(azione === 'stampa' ? "Preparazione stampa..." : "Generazione in corso...");
-        
-        document.body.classList.add('print-mode');
-        document.title = customName; 
-        window.scrollTo(0, 0);
-
-        const sidebar = document.getElementById('sidebar');
-        if (sidebar) sidebar.classList.remove('mobile-open');
-
-        await new Promise(resolve => setTimeout(resolve, 400));
-
-        const opt = {
-            margin: [2, 2, 2, 2],
-            filename: finalFilename,
-            image: { type: 'jpeg', quality: 1 },
-            html2canvas: { scale: 2, useCORS: true, scrollX: 0, scrollY: 0 },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
-        };
-
-        try {
-            if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-                const pdfDataUri = await html2pdf().from(element).set(opt).output('datauristring');
-                const base64Data = pdfDataUri.split(',')[1];
-                const savedFile = await window.Capacitor.Plugins.Filesystem.writeFile({
-                    path: finalFilename, data: base64Data, directory: 'CACHE' 
-                });
-                await window.Capacitor.Plugins.Share.share({
-                    title: azione === 'stampa' ? 'Stampa Turni' : 'Esporta PDF', url: savedFile.uri
-                });
-            } else {
-                if (azione === 'stampa') {
-                    window.print();
-                } else {
-                    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || 
-                                         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-                    if (isMobileDevice) {
-                        const pdfBlob = await html2pdf().from(element).set(opt).output('blob');
-                        let condiviso = false;
-                        if (navigator.share) {
-                            try {
-                                const file = new File([pdfBlob], finalFilename, { type: 'application/pdf' });
-                                if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
-                                    await navigator.share({ title: 'Turni', files: [file] });
-                                    condiviso = true;
-                                }
-                            } catch (shareError) {
-                                if (shareError.name === 'AbortError') condiviso = true; 
-                            }
-                        }
-                        if (!condiviso) {
-                            showToast("Apertura anteprima di sistema...");
-                            setTimeout(() => { window.print(); }, 500);
-                        }
-                    } else {
-                        await html2pdf().from(element).set(opt).save();
-                    }
-                }
-            }
-        }
-        catch (error) {
-            console.error("Errore:", error);
-            showToast("Errore durante l'operazione");
-        } finally {
-            setTimeout(() => {
-                document.body.classList.remove('print-mode');
-                document.title = originalTitle; 
-                const toast = document.getElementById("toast-notification");
-                if(toast) toast.classList.remove("show");
-            }, 1000);
+        if (window.TurniExport && typeof window.TurniExport.gestisciEsportazione === 'function') {
+            return window.TurniExport.gestisciEsportazione(azione, {
+                element: document.getElementById('main'),
+                titleValue: elements.tableHeaderTitle ? elements.tableHeaderTitle.value : 'Turni',
+                showToast
+            });
         }
     }
 
@@ -1571,7 +1592,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusText.textContent = "Stato: 🟢 ONLINE sull'App";
                 statusText.style.color = "#28a745";
             }
-            alert("Turni pubblicati con successo!");
+
+            // Invia notifica in-app + Web Push a tutti i dipendenti dell'azienda
+            if (window.TurniNotifications && window.TurniNotifications.notifyEmployees) {
+                const settimanaStr = new Date(elements.startDatePicker.value).toLocaleDateString('it-IT');
+                window.TurniNotifications.notifyEmployees({
+                    aziendaId: currentAziendaId,
+                    destinatario: 'TUTTI',
+                    titolo: '📅 Nuovi Turni Pubblicati!',
+                    messaggio: `Sono online i turni della settimana del ${settimanaStr}. Apri l'app per consultarli.`,
+                    tipo: 'turni'
+                });
+            }
+
+            alert("Turni pubblicati e notifica inviata ai dipendenti!");
         } catch(e) {
             console.error(e);
             alert("Errore durante la pubblicazione.");
@@ -1630,103 +1664,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function generateICSForUser(userName) {
-        if (!elements.startDatePicker.value) {
-            alert('Seleziona una settimana prima di esportare.');
-            return;
-        }
-        
-        let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Turni Cloud//IT\nCALSCALE:GREGORIAN\n";
-        const startDateStr = elements.startDatePicker.value;
-        const baseDate = new Date(startDateStr);
-        
-        giorni.forEach((giorno, gIndex) => {
-            const currentDay = new Date(baseDate);
-            currentDay.setDate(currentDay.getDate() + gIndex);
-            const dateStr = currentDay.toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
-            
-            turni.forEach(turno => {
-                if (gridState[giorno] && gridState[giorno][turno]) {
-                    gridState[giorno][turno].forEach(person => {
-                        if (person.name === userName) {
-                            let startTime = "090000";
-                            let endTime = "130000";
-                            
-                            const fascia = fasceOrarie[turno.toLowerCase().replace(/\s+/g, "_")] || "generale";
-                            if (fascia === "mattina") {
-                                startTime = "080000"; endTime = "120000";
-                            } else if (fascia === "pranzo") {
-                                startTime = "113000"; endTime = "153000";
-                            } else if (fascia === "cena") {
-                                startTime = "180000"; endTime = "230000";
-                            }
-                            
-                            // Adjust for timezone / local time
-                            // Create a date in local time, convert to UTC string for ICS
-                            const startDt = new Date(currentDay);
-                            startDt.setHours(parseInt(startTime.substring(0, 2)), parseInt(startTime.substring(2, 4)));
-                            const endDt = new Date(currentDay);
-                            endDt.setHours(parseInt(endTime.substring(0, 2)), parseInt(endTime.substring(2, 4)));
-                            
-                            const dtStart = startDt.toISOString().replace(/[-:]/g, '').split('.')[0] + "Z";
-                            const dtEnd = endDt.toISOString().replace(/[-:]/g, '').split('.')[0] + "Z";
-
-                            icsContent += "BEGIN:VEVENT\n";
-                            icsContent += `UID:${btoa(Math.random().toString()).substring(0, 10)}@turnicloud.it\n`;
-                            icsContent += `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z\n`;
-                            icsContent += `DTSTART:${dtStart}\n`;
-                            icsContent += `DTEND:${dtEnd}\n`;
-                            icsContent += `SUMMARY:Turno: ${turno}\n`;
-                            icsContent += "END:VEVENT\n";
-                        }
-                    });
-                }
+        if (window.TurniExport && typeof window.TurniExport.generateICSForUser === 'function') {
+            return window.TurniExport.generateICSForUser(userName, {
+                startDateStr: elements.startDatePicker ? elements.startDatePicker.value : '',
+                giorni,
+                turni,
+                fasceOrarie,
+                getGridData
             });
-        });
-        
-        icsContent += "END:VCALENDAR";
-        
-        
-        const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-        const finalFilename = `turni_${userName.replace(/\s+/g, '_')}_${startDateStr}.ics`;
-
-        try {
-            if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-                const reader = new FileReader();
-                reader.onloadend = async () => {
-                    const base64Data = reader.result.split(',')[1];
-                    const savedFile = await window.Capacitor.Plugins.Filesystem.writeFile({
-                        path: finalFilename, data: base64Data, directory: 'CACHE'
-                    });
-                    await window.Capacitor.Plugins.Share.share({
-                        title: 'Esporta Calendario', url: savedFile.uri
-                    });
-                };
-                reader.readAsDataURL(blob);
-            } else {
-                let condiviso = false;
-                if (navigator.share) {
-                    try {
-                        const file = new File([blob], finalFilename, { type: 'text/calendar' });
-                        if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
-                            await navigator.share({ title: 'Turni', files: [file] });
-                            condiviso = true;
-                        }
-                    } catch (e) {
-                        if (e.name === 'AbortError') condiviso = true;
-                    }
-                }
-                if (!condiviso) {
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = finalFilename;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                }
-            }
-        } catch (err) {
-            console.error("Errore esportazione ICS:", err);
-            alert("Impossibile esportare il calendario.");
         }
     }
 
@@ -1743,7 +1688,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('main')?.classList.remove('one-col-mode');
     }
 
-    // --- GESTIONE IMPORT / ESPORTA CSV ---
+    // --- GESTIONE STATISTICHE SETTIMANALI (delegata a js/modules/stats.js) ---
     
     const btnStats = document.getElementById('statsBtn');
     const statsModal = document.getElementById('stats-modal');
@@ -1751,7 +1696,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (btnStats && statsModal && closeStatsModal) {
         btnStats.addEventListener('click', () => {
-            
             generateStats();
             statsModal.style.display = 'flex';
         });
@@ -1759,92 +1703,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function generateStats() {
-        const container = document.getElementById('stats-container');
-        if (!container) return;
-        
-        const data = getGridData();
-        const statsStaff = {};
-        const statsReparti = {};
-        let totalShifts = 0;
-        
-        // Initialize staff stats
-        staff.forEach(s => {
-            statsStaff[s.name] = { count: 0, reparto: s.reparto, max: s.maxshifts, isFisso: s.is_fisso };
-        });
-        
-        // Count shifts
-        Object.entries(data).forEach(([cellId, people]) => {
-            if (cellId.startsWith('_metadata')) return;
-            people.forEach(p => {
-                const nameMatch = staff.find(s => s.name.toLowerCase() === p.name.toLowerCase());
-                const finalName = nameMatch ? nameMatch.name : p.name;
-                
-                if (!statsStaff[finalName]) {
-                    statsStaff[finalName] = { count: 0, reparto: 'Sconosciuto', max: 0, isFisso: false };
-                }
-                statsStaff[finalName].count++;
-                totalShifts++;
-                
-                const rep = statsStaff[finalName].reparto || 'Sconosciuto';
-                statsReparti[rep] = (statsReparti[rep] || 0) + 1;
-            });
-        });
-        
-        // Sort staff by count (descending)
-        const sortedStaff = Object.entries(statsStaff).sort((a, b) => b[1].count - a[1].count);
-        
-        let html = `
-            <div style="display: flex; gap: 15px; margin-bottom: 20px;">
-                <div style="flex: 1; background: #e3f2fd; padding: 15px; border-radius: 8px; text-align: center;">
-                    <div style="font-size: 24px; font-weight: bold; color: #1565c0;">${totalShifts}</div>
-                    <div style="font-size: 12px; color: #555;">Turni Totali Assegnati</div>
-                </div>
-                <div style="flex: 1; background: #e8f5e9; padding: 15px; border-radius: 8px; text-align: center;">
-                    <div style="font-size: 24px; font-weight: bold; color: #2e7d32;">${sortedStaff.filter(s => s[1].count > 0).length}</div>
-                    <div style="font-size: 12px; color: #555;">Persone Impiegate</div>
-                </div>
-            </div>
-            
-            <h3 style="font-size: 16px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Turni per Persona</h3>
-            <div style="max-height: 250px; overflow-y: auto; padding-right: 10px; margin-bottom: 20px;">
-        `;
-        
-        const maxCount = sortedStaff.length > 0 && sortedStaff[0][1].count > 0 ? sortedStaff[0][1].count : 1;
-        
-        sortedStaff.forEach(([name, info]) => {
-            if (info.count === 0) return; // Skip people with 0 shifts to keep it clean
-            const percentage = (info.count / maxCount) * 100;
-            const overLimit = (info.max > 0 && info.count > info.max);
-            const barColor = overLimit ? '#dc3545' : (info.isFisso ? '#6c757d' : '#28a745');
-            
-            html += `
-                <div style="margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 3px;">
-                        <span><strong>${name}</strong> <small style="color: #666;">(${info.reparto})</small></span>
-                        <span>${info.count} ${info.max > 0 ? ` / ${info.max}` : ''} turni</span>
-                    </div>
-                    <div style="width: 100%; background: #eee; height: 10px; border-radius: 5px; overflow: hidden;">
-                        <div style="width: ${percentage}%; height: 100%; background: ${barColor}; border-radius: 5px;"></div>
-                    </div>
-                </div>
-            `;
-        });
-        
-        html += `</div>
-            <h3 style="font-size: 16px; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;">Distribuzione per Reparto</h3>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-        `;
-        
-        Object.entries(statsReparti).sort((a, b) => b[1] - a[1]).forEach(([rep, count]) => {
-            html += `
-                <div style="background: #f8f9fa; border: 1px solid #ddd; padding: 10px 15px; border-radius: 6px; font-size: 14px;">
-                    <strong>${rep}:</strong> ${count} turni
-                </div>
-            `;
-        });
-        html += `</div>`;
-        
-        container.innerHTML = html;
+        if (window.TurniStats && typeof window.TurniStats.generateWeeklyStats === 'function') {
+            window.TurniStats.generateWeeklyStats('stats-container', getGridData, staff);
+        }
     }
 
     
@@ -1936,7 +1797,7 @@ document.addEventListener('DOMContentLoaded', () => {
         li.querySelector('.btn-del').addEventListener('click', async () => {
             if (isOffline) return alert("Sei offline! Impossibile eliminare il personale.");
             if(confirm(`Eliminare ${p.name}? Verrà rimosso anche dai turni.`)) {
-                await window.supabaseClient.from('staff').delete().eq('id', p.id);
+                await window.supabaseClient.from('staff').delete().eq('id', p.id).eq('azienda_id', currentAziendaId);
                 document.querySelectorAll(`.placed[data-name="${p.name}"]`).forEach(el => {
                     const parent = el.parentElement;
                     el.remove();
@@ -2034,12 +1895,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (id) {
                 const oldPerson = staff.find(p => p.id == id);
                 
-                let { error } = await window.supabaseClient.from('staff').update(payload).eq('id', id);
+                let { error } = await window.supabaseClient.from('staff').update(payload).eq('id', id).eq('azienda_id', currentAziendaId);
 
                 // Fallback se la colonna paga_oraria non esiste ancora nel DB Supabase
                 if (error && error.message && error.message.includes('paga_oraria')) {
                     delete payload.paga_oraria;
-                    const retry = await window.supabaseClient.from('staff').update(payload).eq('id', id);
+                    const retry = await window.supabaseClient.from('staff').update(payload).eq('id', id).eq('azienda_id', currentAziendaId);
                     error = retry.error;
                 }
 
@@ -2156,19 +2017,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 isNew = true;
             }
 
-            // Upsert dell'azienda
-            const { error: azErr } = await window.supabaseClient.from('aziende').upsert({ id: targetAziendaId, nome_ristorante: nomeAzienda });
+            const { data: sessionData } = await supabaseClient.auth.getSession();
+            const session = sessionData?.session;
+            if (!session) {
+                alert("Sessione scaduta.");
+                location.reload();
+                return;
+            }
+
+            // Upsert dell'azienda (assegna owner_id se è nuova)
+            const azPayload = { id: targetAziendaId, nome_ristorante: nomeAzienda };
+            if (isNew) azPayload.owner_id = session.user.id;
+            const { error: azErr } = await window.supabaseClient.from('aziende').upsert(azPayload);
             if (azErr) throw new Error("Errore salvataggio azienda: " + azErr.message);
 
             if (isNew) {
-                const { data: sessionData } = await supabaseClient.auth.getSession();
-                const session = sessionData?.session;
-                if (!session) {
-                    alert("Sessione scaduta.");
-                    location.reload();
-                    return;
-                }
-                const { error: upsertErr } = await window.supabaseClient.from('profili').upsert({ id: session.user.id, azienda_id: targetAziendaId });
+                const { error: upsertErr } = await window.supabaseClient
+                    .from('profili')
+                    .upsert({ id: session.user.id, azienda_id: targetAziendaId }, { onConflict: 'id,azienda_id' });
                 if (upsertErr) throw new Error("Errore collegamento profilo: " + upsertErr.message);
             }
 
@@ -2229,269 +2095,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- FUNZIONI ESPORTAZIONE ED IMPORTAZIONE CSV (EXCEL) ---
+    // --- FUNZIONI ESPORTAZIONE ED IMPORTAZIONE CSV (delegate a js/modules/export.js) ---
     function esportaCSV() {
-        showToast("Esportazione CSV in corso...");
-        
-        const righeCSV = [];
-        
-        // Determiniamo il separatore da usare. In Italia il separatore predefinito per Excel è il punto e virgola ';'.
-        // Usiamo ';' per renderlo direttamente apribile in Excel senza problemi di formattazione.
-        const sep = ';';
-        
-        // Costruiamo la riga d'intestazione
-        // "Turno", "Lunedì", "Martedì", ...
-        const headerRow = ["Turno", ...giorni];
-        righeCSV.push(headerRow.map(h => `"${h.replace(/"/g, '""')}"`).join(sep));
-        
-        // Ciclo su ciascun turno
-        turni.forEach(turno => {
-            const riga = [turno];
-            
-            giorni.forEach(giorno => {
-                const cellId = `${giorno.toLowerCase()}-${turno.toLowerCase().replace(/\s+/g, "_")}`;
-                const cellDiv = document.querySelector(`.cell[data-cell-id="${cellId}"]`);
-                
-                if (cellDiv) {
-                    const people = Array.from(cellDiv.querySelectorAll('.placed')).map(p => {
-                        let name = p.dataset.name;
-                        const inDubbio = p.classList.contains('in-dubbio');
-                        const timeTag = p.dataset.timeTag || '';
-                        
-                        let formatted = name;
-                        if (inDubbio) {
-                            formatted += '?';
-                        }
-                        if (timeTag) {
-                            formatted += ` (${timeTag})`;
-                        }
-                        return formatted;
-                    });
-                    
-                    // Uniamo le persone dello stesso turno con una virgola e spazio
-                    riga.push(people.join(', '));
-                } else {
-                    riga.push('');
-                }
+        if (window.TurniExport && typeof window.TurniExport.esportaCSV === 'function') {
+            return window.TurniExport.esportaCSV({
+                giorni,
+                turni,
+                titleValue: elements.tableHeaderTitle ? elements.tableHeaderTitle.value : 'Turni',
+                showToast
             });
-            
-            righeCSV.push(riga.map(val => {
-                const escaped = val.replace(/"/g, '""');
-                return `"${escaped}"`;
-            }).join(sep));
-        });
-        
-        const csvContent = "\ufeff" + righeCSV.join('\n'); // prepariamo con BOM per supportare caratteri speciali accentati in Excel
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        
-        let customName = elements.tableHeaderTitle.value.trim() || "Turni";
-        customName = customName.replace(/\//g, '-').replace(/\s+/g, '_');
-        const filename = `${customName}.csv`;
-        
-        if (window.Capacitor && window.Capacitor.isNativePlatform()) {
-            // Supporto mobile per Capacitor
-            (async () => {
-                try {
-                    const reader = new FileReader();
-                    reader.onloadend = async () => {
-                        const base64Data = reader.result.split(',')[1];
-                        const savedFile = await window.Capacitor.Plugins.Filesystem.writeFile({
-                            path: filename, data: base64Data, directory: 'CACHE'
-                        });
-                        await window.Capacitor.Plugins.Share.share({
-                            title: 'Esporta CSV', url: savedFile.uri
-                        });
-                    };
-                    reader.readAsDataURL(blob);
-                } catch (err) {
-                    console.error("Errore Capacitor:", err);
-                    alert("Impossibile esportare: " + err.message);
-                }
-            })();
-        } else {
-            // Download standard browser
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            showToast("CSV scaricato con successo!");
         }
-    }
-
-    function parseCSV(text) {
-        let separator = ',';
-        const firstLine = text.split('\n')[0] || '';
-        const commaCount = (firstLine.match(/,/g) || []).length;
-        const semiCount = (firstLine.match(/;/g) || []).length;
-        if (semiCount > commaCount) {
-            separator = ';';
-        }
-
-        const lines = [];
-        let row = [""];
-        let inQuotes = false;
-        for (let i = 0; i < text.length; i++) {
-            const c = text[i];
-            const next = text[i+1];
-            if (c === '"') {
-                if (inQuotes && next === '"') {
-                    row[row.length - 1] += '"';
-                    i++;
-                } else {
-                    inQuotes = !inQuotes;
-                }
-            } else if (c === separator && !inQuotes) {
-                row.push("");
-            } else if ((c === '\r' || c === '\n') && !inQuotes) {
-                if (c === '\r' && next === '\n') {
-                    i++;
-                }
-                lines.push(row);
-                row = [""];
-            } else {
-                row[row.length - 1] += c;
-            }
-        }
-        if (row.length > 1 || row[0] !== "") {
-            lines.push(row);
-        }
-        return lines;
     }
 
     function importaCSV(file) {
-        if (!isLoggedIn) return showToast("Devi accedere per importare i turni.");
-        if (window.isHistoricalMode) return alert("⚠️ Sei in Modalità Archivio. Non è possibile modificare questa griglia.");
-        
-        const reader = new FileReader();
-        reader.onload = async function(e) {
-            const text = e.target.result;
-            
-            // Parser per CSV robusto che rileva il separatore
-            const righe = parseCSV(text);
-            if (righe.length < 2) {
-                return alert("Il file CSV non contiene abbastanza righe.");
-            }
-            
-            // Conferma
-            if (!confirm("Se continui, la griglia attuale della settimana selezionata verrà completamente sovrascritta con i dati del file CSV. Vuoi procedere?")) {
-                return;
-            }
-            
-            showToast("Importazione in corso...");
-            
-            // Svuotiamo prima la griglia
-            document.querySelectorAll('.cell').forEach(c => {
-                c.innerHTML = '';
-                updateCellCounter(c);
+        if (window.TurniExport && typeof window.TurniExport.importaCSV === 'function') {
+            return window.TurniExport.importaCSV(file, {
+                isLoggedIn,
+                isHistoricalMode: window.isHistoricalMode,
+                giorni,
+                turni,
+                staff,
+                showToast,
+                updateCellCounter,
+                createPlacedElement,
+                saveState,
+                updateAllSidebarCounts,
+                renderMobileView: typeof renderMobileView === 'function' ? renderMobileView : null
             });
-            
-            // Troviamo l'header
-            const header = righe[0].map(h => h.trim().toLowerCase());
-            
-            // Mappiamo i giorni alle colonne corrispondenti (es. Lunedì -> colonna X)
-            // Giorni attesi: "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica"
-            const dayColMapping = {};
-            giorni.forEach(g => {
-                const index = header.findIndex(h => h === g.toLowerCase());
-                if (index !== -1) {
-                    dayColMapping[g] = index;
-                }
-            });
-            
-            // Se non troviamo i giorni con corrispondenza esatta, proviamo a mappare le colonne in base alla posizione (da 1 a 7)
-            giorni.forEach((g, idx) => {
-                if (dayColMapping[g] === undefined) {
-                    // Prendi per default la colonna idx + 1 se valida
-                    if (header[idx + 1] !== undefined) {
-                        dayColMapping[g] = idx + 1;
-                    }
-                }
-            });
-            
-            let countImportati = 0;
-            
-            // Processiamo le righe dei turni
-            for (let r = 1; r < righe.length; r++) {
-                const riga = righe[r];
-                if (riga.length < 2) continue;
-                
-                const nomeTurnoCSV = riga[0].trim();
-                if (!nomeTurnoCSV) continue;
-                
-                // Cerchiamo se questo turno esiste nella configurazione attuale
-                const matchedTurnoObj = turni.find(t => t.toLowerCase() === nomeTurnoCSV.toLowerCase());
-                if (!matchedTurnoObj) {
-                    continue;
-                }
-                
-                const turnoId = matchedTurnoObj.toLowerCase().replace(/\s+/g, "_");
-                
-                // Inseriamo le persone nei giorni mappati
-                giorni.forEach(giorno => {
-                    const colIdx = dayColMapping[giorno];
-                    if (colIdx === undefined || riga[colIdx] === undefined) return;
-                    
-                    const cellVal = riga[colIdx].trim();
-                    if (!cellVal) return;
-                    
-                    // Le persone sono separate da virgola ',' o punto e virgola ';' o pipe '|'
-                    let personeNomi = [];
-                    if (cellVal.includes(';')) {
-                        personeNomi = cellVal.split(';').map(p => p.trim());
-                    } else if (cellVal.includes(',')) {
-                        personeNomi = cellVal.split(',').map(p => p.trim());
-                    } else if (cellVal.includes('|')) {
-                        personeNomi = cellVal.split('|').map(p => p.trim());
-                    } else if (cellVal) {
-                        personeNomi = [cellVal];
-                    }
-                    
-                    const cellId = `${giorno.toLowerCase()}-${turnoId}`;
-                    const cellDiv = document.querySelector(`.cell[data-cell-id="${cellId}"]`);
-                    
-                    if (cellDiv) {
-                        personeNomi.forEach(personeRawStr => {
-                            let raw = personeRawStr.trim();
-                            if (!raw) return;
-                            
-                            // Estrazione in dubbio
-                            let inDubbio = false;
-                            if (raw.includes('?')) {
-                                inDubbio = true;
-                                raw = raw.replace(/\?/g, '').trim();
-                            }
-                            
-                            // Estrazione time tag (es. "8-15" da "Max (8-15)")
-                            let timeTag = '';
-                            const parenMatch = raw.match(/\(([^)]+)\)/);
-                            if (parenMatch) {
-                                timeTag = parenMatch[1].trim();
-                                raw = raw.replace(/\([^)]+\)/g, '').trim();
-                            }
-                            
-                            // Cerca corrispondenza nel personale esistente per avere lo spelling corretto
-                            const matchedStaff = staff.find(s => s.name.trim().toLowerCase() === raw.toLowerCase());
-                            const finalName = matchedStaff ? matchedStaff.name : raw;
-                            
-                            // Crea e aggiungi l'elemento
-                            const nuovoPill = createPlacedElement({ name: finalName, inDubbio, timeTag });
-                            cellDiv.appendChild(nuovoPill);
-                            updateCellCounter(cellDiv);
-                            countImportati++;
-                        });
-                    }
-                });
-            }
-            
-            showToast(`Importati con successo ${countImportati} inserimenti!`);
-            await saveState();
-            updateAllSidebarCounts();
-            if (typeof renderMobileView === 'function') renderMobileView();
-        };
-        
-        reader.readAsText(file);
+        }
     }
 
     // --- INIT ---
@@ -2661,159 +2292,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function caricaTimbratureDashboard() {
         if (!currentAziendaId) return;
-        
-        try {
-            const { data, error } = await supabaseClient
-                .from('timbrature')
-                .select('*')
-                .eq('azienda_id', currentAziendaId)
-                .order('ingresso', { ascending: false })
-                .limit(50);
-                
-            if (error) {
-                // se non c'è la tabella
-                document.getElementById('timbrature-active-list').innerHTML = `<span style="color:red">Tabella timbrature non trovata. Segui le istruzioni per crearla.</span>`;
-                return;
-            }
-            
-            let htmlActive = '';
-            let htmlHistory = '';
-            
-            if (!data || data.length === 0) {
-                document.getElementById('timbrature-active-list').innerHTML = 'Nessun dipendente attualmente a lavoro.';
-                document.getElementById('timbrature-history-body').innerHTML = '<tr><td colspan="5" style="padding:10px;text-align:center;">Nessuna timbratura.</td></tr>';
-                return;
-            }
-            
-            // Trova gli attivi (che non hanno uscita)
-            const active = data.filter(t => !t.uscita);
-            if (active.length > 0) {
-                active.forEach(t => {
-                    const ing = new Date(t.ingresso);
-                    htmlActive += `<div style="padding: 8px 0; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between;">
-                        <span style="font-weight: 600;">👤 ${t.nome_dipendente}</span>
-                        <span style="color: #64748b;">Entrato alle ${ing.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'})}</span>
-                    </div>`;
-                });
-            } else {
-                htmlActive = '<div style="color: #64748b; padding: 10px 0;">Nessun dipendente attualmente a lavoro.</div>';
-            }
-            document.getElementById('timbrature-active-list').innerHTML = htmlActive;
-            
-            // Mostra history
-            data.forEach(t => {
-                const d = new Date(t.ingresso);
-                const dataStr = d.toLocaleDateString('it-IT');
-                const ingStr = d.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
-                let uscStr = "-";
-                let oreTot = "-";
-                if (t.uscita) {
-                    const u = new Date(t.uscita);
-                    uscStr = u.toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
-                    const diffMs = u - d;
-                    const diffHrs = diffMs / (1000 * 60 * 60);
-                    oreTot = diffHrs.toFixed(2) + " h";
-                }
-                
-                htmlHistory += `<tr style="border-bottom: 1px solid #f1f5f9;">
-                    <td style="padding: 10px; font-weight: 500;">${t.nome_dipendente}</td>
-                    <td style="padding: 10px; color: #64748b;">${dataStr}</td>
-                    <td style="padding: 10px; color: #10b981; font-weight: bold;">${ingStr}</td>
-                    <td style="padding: 10px; color: ${t.uscita ? '#ef4444' : '#94a3b8'}; font-weight: bold;">${uscStr}</td>
-                    <td style="padding: 10px; font-weight: 600;">${oreTot}</td>
-                </tr>`;
-            });
-            
-            document.getElementById('timbrature-history-body').innerHTML = htmlHistory;
-            
-        } catch(e) {
-            console.error(e);
+        if (window.TurniTimbrature && typeof window.TurniTimbrature.caricaTimbratureDashboard === 'function') {
+            return window.TurniTimbrature.caricaTimbratureDashboard(currentAziendaId);
         }
     }
 
     async function generaReportTimbrature() {
-        const monthStr = document.getElementById('report-month').value;
+        const monthStr = document.getElementById('report-month')?.value;
         if (!monthStr || !currentAziendaId) return;
-        
-        const [year, month] = monthStr.split('-');
-        
-        // Start date
-        const startDate = new Date(year, month - 1, 1).toISOString();
-        // End date (first day of next month)
-        const endDate = new Date(year, month, 1).toISOString();
-        
-        alert("Generazione report in corso per " + monthStr + "... Attendere.");
-        
-        try {
-            const { data, error } = await supabaseClient
-                .from('timbrature')
-                .select('*')
-                .eq('azienda_id', currentAziendaId)
-                .gte('ingresso', startDate)
-                .lt('ingresso', endDate)
-                .order('nome_dipendente');
-                
-            if (error) throw error;
-            if (!data || data.length === 0) {
-                alert("Nessuna timbratura trovata per questo mese.");
-                return;
-            }
-            
-            // We need to fetch staff cost to calculate costs
-            const { data: staffData } = await supabaseClient.from('staff').select('*').eq('azienda_id', currentAziendaId);
-            const staffMap = {};
-            if (staffData) {
-                staffData.forEach(s => staffMap[s.name] = s);
-            }
-            
-            // Raggruppa per dipendente
-            const report = {};
-            data.forEach(t => {
-                if (!t.uscita) return; // skip se non è uscito
-                
-                if (!report[t.nome_dipendente]) report[t.nome_dipendente] = { ore: 0, costo: 0 };
-                
-                const dIng = new Date(t.ingresso);
-                const dUsc = new Date(t.uscita);
-                const diffHrs = (dUsc - dIng) / (1000 * 60 * 60);
-                
-                report[t.nome_dipendente].ore += diffHrs;
-            });
-            
-            let csvContent = "Dipendente,Ore Totali,Costo Orario (€),Costo Totale Stimato (€)\n";
-            let totalCostoAzienda = 0;
-            
-            for (const nome in report) {
-                const ore = report[nome].ore;
-                let costoOrario = 0;
-                
-                if (staffMap[nome] && staffMap[nome].paga_oraria) {
-                    costoOrario = parseFloat(staffMap[nome].paga_oraria) || 0;
-                } else if (staffMap[nome] && staffMap[nome].costo_orario) {
-                    costoOrario = parseFloat(staffMap[nome].costo_orario) || 0;
-                } else if (staffMap[nome] && staffMap[nome].costo) {
-                    costoOrario = parseFloat(staffMap[nome].costo) || 0;
-                }
-                
-                const costoTot = ore * costoOrario;
-                totalCostoAzienda += costoTot;
-                
-                csvContent += `${nome},${ore.toFixed(2)},${costoOrario.toFixed(2)},${costoTot.toFixed(2)}\n`;
-            }
-            
-            csvContent += `\nTOTALE AZIENDA,,,$${totalCostoAzienda.toFixed(2)}\n`;
-            
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `Report_Presenze_${monthStr}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-            
-        } catch(e) {
-            console.error(e);
-            alert("Errore generazione report: " + e.message);
+        if (window.TurniTimbrature && typeof window.TurniTimbrature.generaReportTimbrature === 'function') {
+            return window.TurniTimbrature.generaReportTimbrature(currentAziendaId, monthStr);
         }
     }
 
@@ -2826,125 +2314,9 @@ window.updateMobileHeader = function() {};
 function renderMobileView() {}
 function updateMobileHeader() {}
 
-
-    async function caricaStatisticheGlobali() {
-        const statsContainer = document.getElementById('global-stats-content');
-        if (!statsContainer) return;
-        
-        statsContainer.innerHTML = '<div style="font-size:14px; color:#666; text-align: center; padding: 40px;">Caricamento statistiche...</div>';
-        
-        try {
-            const { data: griglie } = await window.supabaseClient.from('griglie_turni').select('*');
-            
-            let totaleTurniAttivi = 0;
-            let attivitaConTurni = new Set();
-            let conteggioPersone = {};
-            let repartiStats = {};
-            
-            if (griglie) {
-                griglie.forEach(g => {
-                    if (g.dati_griglia && g.data_lunedi && !g.data_lunedi.startsWith('1970')) {
-                        attivitaConTurni.add(g.azienda_id);
-                        Object.entries(g.dati_griglia).forEach(([key, arr]) => {
-                            if (!key.startsWith('_metadata') && Array.isArray(arr)) {
-                                totaleTurniAttivi += arr.length;
-                                // Simple extraction of turno name from cellId (e.g., "Lunedì-camere")
-                                const parts = key.split('-');
-                                const turnoName = parts.length > 1 ? parts.slice(1).join('-') : 'altro';
-                                
-                                arr.forEach(p => {
-                                    const n = p.name.trim().toUpperCase();
-                                    conteggioPersone[n] = (conteggioPersone[n] || 0) + 1;
-                                    repartiStats[turnoName] = (repartiStats[turnoName] || 0) + 1;
-                                });
-                            }
-                        });
-                    }
-                });
-            }
-            
-            const personeArray = Object.entries(conteggioPersone).sort((a,b) => b[1] - a[1]);
-            const copertiPercent = (window._lastAziendeList && window._lastAziendeList.length > 0) ? Math.round((attivitaConTurni.size / window._lastAziendeList.length) * 100) : 0;
-            const aziendeTotali = window._lastAziendeList ? window._lastAziendeList.length : 0;
-            
-            // Generate Pie Chart (Conic Gradient) with hover tooltips
-            let pieGradient = '';
-            let cumulativePercent = 0;
-            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#eab308', '#06b6d4', '#a855f7'];
-            
-            let hoverZones = '';
-            
-            if (totaleTurniAttivi > 0) {
-                let i = 0;
-                for (const [nome, count] of personeArray) {
-                    const percent = (count / totaleTurniAttivi) * 100;
-                    const color = colors[i % colors.length];
-                    
-                    pieGradient += `${color} ${cumulativePercent}% ${cumulativePercent + percent}%, `;
-                    
-                    // Create invisible absolute positioned slices for hover
-                    // (A simple approach is generating a tooltip container and showing info on mousemove, but CSS conic-gradient tooltips are tricky. 
-                    // Let's just create a list below the pie, and use standard chart. Since standard chart needs library, we'll build a neat visual list next to it instead of left, or we can use custom tooltip on hover on list items.
-                    // Actually, user wants "quando passi il mouse esce nome e percentuale". A simpler approach without external lib is a custom D3 or Recharts, but we can't easily add them here without breaking. 
-                    // So let's just make the pie chart and a nice grid of cards, maybe skip hover on SVG and use flex items that expand on hover.)
-                    
-                    cumulativePercent += percent;
-                    i++;
-                }
-                pieGradient = pieGradient.slice(0, -2); // remove last comma
-            } else {
-                pieGradient = '#e2e8f0 0% 100%';
-            }
-
-            let staffListHtml = '';
-            personeArray.forEach(([nome, count], idx) => {
-                const percent = totaleTurniAttivi > 0 ? Math.round((count / totaleTurniAttivi) * 100) : 0;
-                const color = colors[idx % colors.length];
-                staffListHtml += `
-                    <div title="${nome}: ${percent}% (${count} turni)" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 15px; background: #f8fafc; border-radius: 8px; border-left: 4px solid ${color}; transition: all 0.2s; cursor: default;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f8fafc'">
-                        <div style="font-weight: 500; color: #334155; font-size: 14px;">${nome}</div>
-                        <div style="display: flex; align-items: center; gap: 15px;">
-                            <div style="font-size: 13px; color: #64748b;">${count} turni</div>
-                            <div style="font-size: 14px; font-weight: 600; color: ${color}; width: 40px; text-align: right;">${percent}%</div>
-                        </div>
-                    </div>
-                `;
-            });
-
-            statsContainer.innerHTML = `
-                <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 30px;">
-                    <div style="flex: 1; min-width: 200px; background: #f0f9ff; padding: 25px; border-radius: 12px; border: 1px solid #bae6fd;">
-                        <div style="font-size: 14px; color: #0284c7; margin-bottom: 5px; font-weight: 600; text-transform: uppercase;">Attività Pianificate</div>
-                        <div style="display: flex; align-items: baseline; gap: 10px;">
-                            <div style="font-size: 36px; font-weight: 700; color: #0369a1;">${copertiPercent}%</div>
-                            <div style="font-size: 14px; color: #0284c7;">(${attivitaConTurni.size} su ${aziendeTotali})</div>
-                        </div>
-                    </div>
-                    
-                    <div style="flex: 1; min-width: 200px; background: #ecfdf5; padding: 25px; border-radius: 12px; border: 1px solid #a7f3d0;">
-                        <div style="font-size: 14px; color: #059669; margin-bottom: 5px; font-weight: 600; text-transform: uppercase;">Turni Assegnati Globali</div>
-                        <div style="font-size: 36px; font-weight: 700; color: #047857;">${totaleTurniAttivi}</div>
-                        <div style="font-size: 13px; color: #059669; margin-top: 5px;">Somma di tutti i presidi attuali</div>
-                    </div>
-                </div>
-                
-                <h3 style="color: #1e293b; margin-bottom: 20px; font-size: 18px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Dettaglio Personale</h3>
-                
-                <div style="display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap;">
-                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; background: white; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); border: 1px solid #f1f5f9;">
-                        <div style="font-size: 15px; font-weight: 600; color: #475569;">Distribuzione Turni</div>
-                        <div style="width: 200px; height: 200px; border-radius: 50%; background: conic-gradient(${pieGradient}); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1), 0 4px 10px rgba(0,0,0,0.05);"></div>
-                        <div style="font-size: 12px; color: #94a3b8;">Passa il mouse sulla lista per i dettagli</div>
-                    </div>
-                    
-                    <div style="flex: 1; min-width: 300px; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; max-height: 350px; overflow-y: auto; padding-right: 10px;">
-                        ${staffListHtml || '<div style="color:#64748b;">Nessun turno assegnato.</div>'}
-                    </div>
-                </div>
-            `;
-        } catch(e) {
-            console.error(e);
-            statsContainer.innerHTML = '<div style="font-size:14px; color:red; text-align:center; padding: 20px;">Errore: ' + e.message + '</div>';
-        }
+async function caricaStatisticheGlobali() {
+    if (window.TurniStats && typeof window.TurniStats.caricaStatisticheGlobali === 'function') {
+        return window.TurniStats.caricaStatisticheGlobali();
     }
+}
 

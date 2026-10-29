@@ -4,13 +4,16 @@ export const SUPABASE_CONFIG = {
 };
 
 export function getSupabaseClient() {
-    if (window.supabaseClient) {
+    if (typeof window !== 'undefined' && window.supabaseClient) {
         return window.supabaseClient;
     }
     if (typeof supabase !== 'undefined') {
         try {
-            window.supabaseClient = supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
-            return window.supabaseClient;
+            const client = supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
+            if (typeof window !== 'undefined') {
+                window.supabaseClient = client;
+            }
+            return client;
         } catch (err) {
             console.error("Errore inizializzazione Supabase client:", err);
             return null;
@@ -19,3 +22,9 @@ export function getSupabaseClient() {
     console.warn("Libreria Supabase non caricata.");
     return null;
 }
+
+if (typeof window !== 'undefined') {
+    window.SUPABASE_CONFIG = SUPABASE_CONFIG;
+    window.getSupabaseClient = getSupabaseClient;
+}
+

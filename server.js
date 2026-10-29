@@ -7,28 +7,32 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
 
 // === PUSH NOTIFICATIONS SETUP ===
-// Queste sono le chiavi VAPID generate per l'app. (Nel mondo reale andrebbero in variabili d'ambiente)
-const publicVapidKey = "BLAvFrPhZKkFEPt_3FAdMcPFB8aCYoF1TiJ354yaVzVuxHOcq_g6IHECTONm4j4fOBiLX4pwKy1ObLjKAjcYQE4";
-const privateVapidKey = "UX6bsEZv55Mtn4-EX8uMN-3SzLWwNM7R4OtF9Obj9_I";
+const publicVapidKey = process.env.VAPID_PUBLIC_KEY || "BLAvFrPhZKkFEPt_3FAdMcPFB8aCYoF1TiJ354yaVzVuxHOcq_g6IHECTONm4j4fOBiLX4pwKy1ObLjKAjcYQE4";
+const privateVapidKey = process.env.VAPID_PRIVATE_KEY || "UX6bsEZv55Mtn4-EX8uMN-3SzLWwNM7R4OtF9Obj9_I";
+const vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@turnicloud.pro";
 
 webpush.setVapidDetails(
-  "mailto:tuo.indirizzo@email.com",
+  vapidSubject,
   publicVapidKey,
   privateVapidKey
 );
 
 // Endpoint API per inviare una notifica (può essere chiamato ad es. dal pannello Admin)
 app.post("/api/send-push", async (req, res) => {
-  const { subscription, title, body } = req.body;
+  const { subscription, title, body } = req.body || {};
+
+  if (!subscription || typeof subscription.endpoint !== "string") {
+    return res.status(400).json({ error: "Subscription push mancante o non valida" });
+  }
   
   const payload = JSON.stringify({
-    title: title || "Nuovo Avviso",
-    body: body || "Hai una nuova notifica",
+    title: String(title || "Nuovo Avviso").slice(0, 120),
+    body: String(body || "Hai una nuova notifica").slice(0, 500),
     url: "/app_dipendente.html"
   });
 

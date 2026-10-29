@@ -1,8 +1,8 @@
-// Usa le stesse chiavi del progetto
-const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
+// Usa la configurazione centralizzata da js/config.js (con fallback)
+const SUPABASE_URL = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.URL) || 'https://api.158.180.239.147.sslip.io';
+const SUPABASE_ANON_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.ANON_KEY) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxNDQ4MTcwLCJleHAiOjIxMDY4MDgxNzB9.v6w9RwQBBKxdC0-sN08whXB0NjRbWgy_tCzuX_piuWk';
 
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = (window.getSupabaseClient && window.getSupabaseClient()) || supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 document.addEventListener('DOMContentLoaded', async () => {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -102,7 +102,7 @@ function createToggle(aziendaId, moduleKey, label, isChecked) {
         <div class="module-toggle">
             <span class="toggle-label">${label}</span>
             <label class="switch">
-                <input type="checkbox" ${checkedHtml} onchange="updateModule(${aziendaId}, '${moduleKey}', this.checked)">
+                <input type="checkbox" ${checkedHtml} onchange="updateModule('${aziendaId}', '${moduleKey}', this.checked)">
                 <span class="slider"></span>
             </label>
         </div>

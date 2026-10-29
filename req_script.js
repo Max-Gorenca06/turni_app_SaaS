@@ -7,18 +7,27 @@
     } else {
         document.getElementById('form-content').style.display = 'block';
 
-        const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co'; // <--- LE TUE CHIAVI VECCHIE (O SAAS SE LE HAI CAMBIATE)
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const SUPABASE_URL = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.URL) || 'https://api.158.180.239.147.sslip.io';
+        const SUPABASE_ANON_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.ANON_KEY) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxNDQ4MTcwLCJleHAiOjIxMDY4MDgxNzB9.v6w9RwQBBKxdC0-sN08whXB0NjRbWgy_tCzuX_piuWk';
+        const supabaseClient = (window.getSupabaseClient && window.getSupabaseClient()) || supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         async function caricaDati() {
-            // 2. IL FILTRO SAAS: Carica solo i nomi di QUESTA azienda
-            const { data: staffData } = await supabaseClient.from('staff').select('name').eq('azienda_id', aziendaId).order('name');
+            // 2. IL FILTRO SAAS: Carica solo i nomi di QUESTA azienda tramite RPC sicura
+            let { data: staffData, error: staffErr } = await supabaseClient.rpc('get_public_staff_names', { p_azienda_id: aziendaId });
+            if (staffErr && staffErr.code === 'PGRST202') {
+                const fallback = await supabaseClient.from('staff').select('name').eq('azienda_id', aziendaId).order('name');
+                staffData = fallback.data;
+            }
             const selectNome = document.getElementById('nome');
             selectNome.innerHTML = '<option value="" disabled selected>Scegli il tuo nome...</option>';
             
             if (staffData) {
-                staffData.forEach(p => { selectNome.innerHTML += `<option value="${p.name}">${p.name}</option>`; });
+                staffData.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.name;
+                    opt.textContent = p.name;
+                    selectNome.appendChild(opt);
+                });
             } else {
                 selectNome.innerHTML = '<option value="" disabled>Errore di connessione</option>';
             }
@@ -82,6 +91,15 @@
             if (error) {
                 msgDiv.style.color = "red"; msgDiv.textContent = "Errore di connessione. Riprova."; console.error(error);
             } else {
+                if (window.TurniNotifications && window.TurniNotifications.notifyAdminNewAbsence) {
+                    window.TurniNotifications.notifyAdminNewAbsence({
+                        aziendaId,
+                        nomeDipendente: nome,
+                        dataInizio,
+                        dataFine,
+                        turno
+                    });
+                }
                 msgDiv.style.color = "green"; msgDiv.textContent = "✅ Richiesta inviata con successo! Puoi chiudere.";
                 document.getElementById('data-inizio').value = ''; document.getElementById('data-fine').value = ''; document.getElementById('motivo').value = '';
             }

@@ -55,16 +55,17 @@
         <div id="status-msg"></div>
     </div>
 
-    <script>
+    <script type="module">
+        import { SUPABASE_CONFIG, getSupabaseClient } from './js/config.js';
+
         window.addEventListener('error', function(e) {
-            document.body.innerHTML += '<div style="color:red; padding: 20px;">Error: ' + e.message + '</div>';
+            console.error('Error:', e.message);
         });
         window.addEventListener('unhandledrejection', function(e) {
-            document.body.innerHTML += '<div style="color:red; padding: 20px;">Promise Error: ' + (e.reason && e.reason.message ? e.reason.message : e.reason) + '</div>';
+            console.error('Promise Error:', e.reason && e.reason.message ? e.reason.message : e.reason);
         });
-        const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co';
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const supabaseClient = getSupabaseClient() || supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
         
         const urlParams = new URLSearchParams(window.location.search);
         const aziendaId = urlParams.get('id');
@@ -94,14 +95,23 @@
         }
         
         async function loadStaff() {
-            const { data, error } = await supabaseClient.from('staff').select('name').eq('azienda_id', aziendaId).order('name');
+            // Usa RPC sicura che non espone email/password/paga_oraria
+            let { data, error } = await supabaseClient.rpc('get_public_staff_names', { p_azienda_id: aziendaId });
+            if (error && error.code === 'PGRST202') {
+                const fallback = await supabaseClient.from('staff').select('name').eq('azienda_id', aziendaId).order('name');
+                data = fallback.data;
+                error = fallback.error;
+            }
             if (error || !data) {
                 staffSelect.innerHTML = '<option value="" disabled>Errore caricamento</option>';
                 return;
             }
             staffSelect.innerHTML = '<option value="" disabled selected>Seleziona il tuo nome...</option>';
             data.forEach(p => {
-                staffSelect.innerHTML += `<option value="${p.name}">${p.name}</option>`;
+                const opt = document.createElement('option');
+                opt.value = p.name;
+                opt.textContent = p.name;
+                staffSelect.appendChild(opt);
             });
         }
         
@@ -112,6 +122,11 @@
             swipeArea.style.display = 'none';
             loadingState.style.display = 'block';
             statusMsg.textContent = '';
+
+            // Chiudi eventuali timbrature dimenticate (> 14h) prima di verificare lo stato
+            try {
+                await supabaseClient.rpc('auto_close_stale_timbrature', { p_max_hours: 14, p_default_shift_hours: 8 });
+            } catch (_) {}
             
             // Cerca l'ultimo record di timbratura di questa persona
             const { data, error } = await supabaseClient.from('timbrature')
@@ -224,7 +239,7 @@
             } else if (currentStatus === 'out') {
                 const { error } = await supabaseClient.from('timbrature').update({
                     uscita: now
-                }).eq('id', lastRecordId).eq('azienda_id', aziendaId);
+                }).eq('id', lastRecordId).eq('azienda_id', aziendaId).is('uscita', null);
                 
                 loadingState.style.display = 'none';
                 if (error) {

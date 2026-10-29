@@ -1,21 +1,47 @@
-// ⚠️ Usa la stessa chiave di script.js
-const SUPABASE_URL = 'https://mrwjqeachzcmnwahnqjn.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1yd2pxZWFjaHpjbW53YWhucWpuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNDcxMTksImV4cCI6MjA5MzcyMzExOX0.S1WVO4y59azzM-iQss_836KHtK1gnmpfglRXZ1KRKdQ';
+// Usa la configurazione centralizzata da js/config.js (con fallback)
+const SUPABASE_URL = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.URL) || 'https://api.158.180.239.147.sslip.io';
+const SUPABASE_ANON_KEY = (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.ANON_KEY) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkxNDQ4MTcwLCJleHAiOjIxMDY4MDgxNzB9.v6w9RwQBBKxdC0-sN08whXB0NjRbWgy_tCzuX_piuWk';
 
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = (window.getSupabaseClient && window.getSupabaseClient()) || supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let allProfiles = [];
 let currentProfile = null;
 let currentStatus = null; // for timbratore
 let lastRecordId = null;
 
+function normalizeProfile(p) {
+    if (!p) return p;
+    const nomeRistorante = p.nome_ristorante || (p.aziende && p.aziende.nome_ristorante) || 'Azienda';
+    const moduliAttivi = p.moduli_attivi || (p.aziende && p.aziende.moduli_attivi) || null;
+    const reparto = p.reparto || p.role || 'Staff';
+    return {
+        id: p.id,
+        azienda_id: p.azienda_id,
+        name: p.name,
+        email: p.email,
+        reparto: reparto,
+        role: p.role || reparto,
+        nome_ristorante: nomeRistorante,
+        aziende: {
+            nome_ristorante: nomeRistorante,
+            moduli_attivi: moduliAttivi
+        }
+    };
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const savedProfiles = localStorage.getItem('tc_employee_profiles');
     if (savedProfiles) {
-        allProfiles = JSON.parse(savedProfiles);
-        currentProfile = allProfiles[0];
-        showApp();
-        loadData();
+        try {
+            allProfiles = JSON.parse(savedProfiles).map(normalizeProfile);
+            currentProfile = allProfiles[0];
+            if (currentProfile) {
+                showApp();
+                loadData();
+            }
+        } catch (e) {
+            localStorage.removeItem('tc_employee_profiles');
+        }
     }
 
     // Login Form
@@ -33,17 +59,17 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             let staffData = null;
 
-            // Tentativo 1: Uso della funzione RPC sicura (consigliata)
+            // Uso della funzione RPC sicura (SECURITY DEFINER, non espone password a client anonimi)
             const { data: rpcData, error: rpcError } = await supabaseClient
                 .rpc('verify_staff_credentials', { p_email: email, p_password: password });
 
             if (!rpcError && rpcData && rpcData.length > 0) {
                 staffData = rpcData;
-            } else {
-                // Fallback di compatibilità per tabelle tradizionali
+            } else if (rpcError && rpcError.code === 'PGRST202') {
+                // Fallback solo se la funzione RPC non è stata ancora creata nel DB
                 const { data: directData, error: directError } = await supabaseClient
                     .from('staff')
-                    .select('*, aziende(nome_ristorante, moduli_attivi)')
+                    .select('id, azienda_id, name, email, reparto, aziende(nome_ristorante, moduli_attivi)')
                     .eq('email', email)
                     .eq('password', password);
                 
@@ -52,12 +78,13 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (staffData && staffData.length > 0) {
-                allProfiles = staffData;
+                allProfiles = staffData.map(normalizeProfile);
                 currentProfile = allProfiles[0];
                 localStorage.setItem('tc_employee_profiles', JSON.stringify(allProfiles));
                 showApp();
                 loadData();
             } else {
+                err.textContent = 'Credenziali non valide.';
                 err.style.display = 'block';
             }
         } catch (e) {
@@ -98,7 +125,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('absence-form').addEventListener('submit', submitAbsence);
     
     document.getElementById('azienda-select').addEventListener('change', (e) => {
-        currentProfile = allProfiles.find(p => p.azienda_id === e.target.value);
+        currentProfile = allProfiles.find(p => String(p.azienda_id) === String(e.target.value));
+        applyModules();
         updateProfileView();
         loadData();
     });
@@ -113,12 +141,13 @@ function showApp() {
     allProfiles.forEach(p => {
         const opt = document.createElement('option');
         opt.value = p.azienda_id;
-        opt.textContent = p.aziende ? p.aziende.nome_ristorante : 'Azienda Sconosciuta';
+        opt.textContent = p.nome_ristorante || (p.aziende ? p.aziende.nome_ristorante : 'Azienda Sconosciuta');
         if (p.azienda_id === currentProfile.azienda_id) opt.selected = true;
         select.appendChild(opt);
     });
 
     applyModules();
+    updateProfileView();
 }
 
 async function applyModules() {
@@ -156,16 +185,13 @@ async function applyModules() {
     if (pushCard) pushCard.style.display = moduli.mod_notifiche_push ? 'block' : 'none';
 }
 
-    updateProfileView();
-}
-
 function updateProfileView() {
     document.getElementById('user-name').textContent = currentProfile.name.split(' ')[0];
     document.getElementById('user-avatar').textContent = currentProfile.name.charAt(0).toUpperCase();
     
     document.getElementById('prof-name').textContent = currentProfile.name;
     document.getElementById('prof-email').textContent = currentProfile.email || 'N/D';
-    document.getElementById('prof-reparto').textContent = currentProfile.reparto || 'N/D';
+    document.getElementById('prof-reparto').textContent = currentProfile.reparto || currentProfile.role || 'N/D';
 
     const hour = new Date().getHours();
     let greeting = 'Buongiorno,';
@@ -178,6 +204,8 @@ async function loadData() {
     loadShifts();
     checkTimbratoreStatus();
     loadAbsences();
+    loadNotifications();
+    setupRealtimeChannel();
 }
 
 async function loadShifts() {
@@ -275,6 +303,10 @@ function capitalize(str) {
 // --- TIMBRATORE LOGIC ---
 async function checkTimbratoreStatus() {
     try {
+        try {
+            await supabaseClient.rpc('auto_close_stale_timbrature', { p_max_hours: 14, p_default_shift_hours: 8 });
+        } catch (_) {}
+
         const { data, error } = await supabaseClient
             .from('timbrature')
             .select('*')
@@ -290,9 +322,10 @@ async function checkTimbratoreStatus() {
             recentDiv.innerHTML = data.map(t => {
                 const i = new Date(t.ingresso).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'});
                 const u = t.uscita ? new Date(t.uscita).toLocaleTimeString('it-IT', {hour:'2-digit', minute:'2-digit'}) : '...';
+                const autoBadge = t.chiusa_automaticamente ? ' <span style="background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:4px;font-size:10px;">⚠️ Auto</span>' : '';
                 return `<div style="padding: 5px 0; border-bottom: 1px solid #e2e8f0; display:flex; justify-content:space-between;">
                     <span>${new Date(t.ingresso).toLocaleDateString('it-IT')}</span>
-                    <strong>${i} - ${u}</strong>
+                    <strong>${i} - ${u}${autoBadge}</strong>
                 </div>`;
             }).join('');
         } else {
@@ -420,7 +453,7 @@ async function recordTime() {
         } else {
             const { error } = await supabaseClient.from('timbrature').update({
                 uscita: now
-            }).eq('id', lastRecordId);
+            }).eq('id', lastRecordId).eq('azienda_id', currentProfile.azienda_id).is('uscita', null);
             if (error) throw error;
             lastRecordId = null;
             currentStatus = 'out';
@@ -463,6 +496,16 @@ async function submitAbsence(e) {
         }]);
         
         if (error) throw error;
+
+        if (window.TurniNotifications && window.TurniNotifications.notifyAdminNewAbsence) {
+            window.TurniNotifications.notifyAdminNewAbsence({
+                aziendaId: currentProfile.azienda_id,
+                nomeDipendente: currentProfile.name,
+                dataInizio: date,
+                dataFine: date,
+                turno: type
+            });
+        }
         
         statusDiv.textContent = 'Richiesta inviata con successo!';
         statusDiv.style.color = '#10b981';
@@ -528,13 +571,200 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    if ('serviceWorker' in navigator) {
+        try {
+            await navigator.serviceWorker.register('./sw.js');
+        } catch (err) {
+            console.warn('Registrazione ServiceWorker fallita:', err);
+        }
+    }
+
     const pushBtn = document.getElementById('push-btn');
     if (pushBtn) {
         pushBtn.addEventListener('click', subscribeToPush);
     }
     checkPushStatus();
+
+    const notifBell = document.getElementById('emp-notif-bell');
+    const notifModal = document.getElementById('emp-notif-modal');
+    const notifClose = document.getElementById('emp-notif-close');
+    const notifMarkRead = document.getElementById('emp-notif-mark-read');
+
+    if (notifBell && notifModal) {
+        notifBell.addEventListener('click', () => {
+            notifModal.style.display = 'flex';
+            loadNotifications();
+        });
+    }
+    if (notifClose && notifModal) {
+        notifClose.addEventListener('click', () => {
+            notifModal.style.display = 'none';
+        });
+        notifModal.addEventListener('click', (e) => {
+            if (e.target === notifModal) notifModal.style.display = 'none';
+        });
+    }
+    if (notifMarkRead) {
+        notifMarkRead.addEventListener('click', markAllNotificationsRead);
+    }
 });
+
+let empRealtimeChannel = null;
+let currentNotifications = [];
+
+function showEmployeeToast(title, message) {
+    let toast = document.getElementById('emp-realtime-toast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'emp-realtime-toast';
+        toast.style.cssText = 'position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#1e293b; color:white; padding:14px 18px; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.25); z-index:9999; width:90%; max-width:360px; transition:opacity 0.3s; font-size:13px;';
+        document.body.appendChild(toast);
+    }
+    toast.innerHTML = `<div style="font-weight:700; margin-bottom:3px;">${title}</div><div style="color:#cbd5e1;">${message}</div>`;
+    toast.style.opacity = '1';
+    toast.style.display = 'block';
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => { toast.style.display = 'none'; }, 300);
+    }, 4500);
+}
+
+async function loadNotifications() {
+    if (!currentProfile || !currentProfile.azienda_id) return;
+    try {
+        const { data, error } = await supabaseClient
+            .from('notifiche')
+            .select('*')
+            .eq('azienda_id', currentProfile.azienda_id)
+            .in('destinatario', ['TUTTI', currentProfile.name])
+            .order('created_at', { ascending: false })
+            .limit(25);
+
+        if (error) return;
+        currentNotifications = data || [];
+
+        const readIds = JSON.parse(localStorage.getItem('tc_read_notif_ids') || '[]');
+        const unreadCount = currentNotifications.filter(n => !n.letto && !readIds.includes(n.id)).length;
+
+        const badge = document.getElementById('emp-notif-badge');
+        if (badge) {
+            if (unreadCount > 0) {
+                badge.textContent = unreadCount > 9 ? '9+' : String(unreadCount);
+                badge.style.display = 'flex';
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+
+        const list = document.getElementById('emp-notif-list');
+        if (!list) return;
+
+        if (currentNotifications.length === 0) {
+            list.innerHTML = '<div style="text-align: center; color: var(--text-light); padding: 30px 10px; font-size: 14px;">Nessuna notifica presente.</div>';
+            return;
+        }
+
+        list.innerHTML = currentNotifications.map(n => {
+            const isRead = n.letto || readIds.includes(n.id);
+            const dateStr = new Date(n.created_at).toLocaleString('it-IT', {
+                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+            });
+            return `
+                <div style="background: ${isRead ? '#f8fafc' : '#eff6ff'}; border: 1px solid ${isRead ? '#e2e8f0' : '#bfdbfe'}; border-radius: 14px; padding: 14px; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <strong style="font-size: 14px; color: #0f172a;">${n.titolo}</strong>
+                        <span style="font-size: 11px; color: #64748b;">${dateStr}</span>
+                    </div>
+                    <div style="font-size: 13px; color: #334155; line-height: 1.4;">${n.messaggio}</div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        console.warn('Errore caricamento notifiche:', err);
+    }
+}
+
+async function markAllNotificationsRead() {
+    if (!currentProfile || !currentProfile.azienda_id) return;
+    const readIds = JSON.parse(localStorage.getItem('tc_read_notif_ids') || '[]');
+    currentNotifications.forEach(n => {
+        if (!readIds.includes(n.id)) readIds.push(n.id);
+    });
+    localStorage.setItem('tc_read_notif_ids', JSON.stringify(readIds.slice(-100)));
+
+    // Segna come lette sul DB quelle personali
+    const personalUnreadIds = currentNotifications
+        .filter(n => n.destinatario === currentProfile.name && !n.letto)
+        .map(n => n.id);
+
+    if (personalUnreadIds.length > 0) {
+        await supabaseClient
+            .from('notifiche')
+            .update({ letto: true })
+            .in('id', personalUnreadIds);
+    }
+
+    loadNotifications();
+}
+
+function setupRealtimeChannel() {
+    if (!currentProfile || !currentProfile.azienda_id) return;
+    if (empRealtimeChannel) {
+        supabaseClient.removeChannel(empRealtimeChannel);
+    }
+
+    empRealtimeChannel = supabaseClient
+        .channel('emp-channel-' + currentProfile.azienda_id)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'notifiche',
+                filter: `azienda_id=eq.${currentProfile.azienda_id}`
+            },
+            (payload) => {
+                const n = payload.new;
+                if (!n) return;
+                if (n.destinatario === 'TUTTI' || n.destinatario === currentProfile.name) {
+                    showEmployeeToast(n.titolo, n.messaggio);
+                    if (window.TurniNotifications && window.TurniNotifications.triggerLocalOSNotification) {
+                        window.TurniNotifications.triggerLocalOSNotification(n.titolo, n.messaggio);
+                    }
+                    loadNotifications();
+                    loadShifts();
+                    loadAbsences();
+                }
+            }
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'griglie_turni',
+                filter: `azienda_id=eq.${currentProfile.azienda_id}`
+            },
+            () => {
+                loadShifts();
+            }
+        )
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'assenze_globali',
+                filter: `azienda_id=eq.${currentProfile.azienda_id}`
+            },
+            () => {
+                loadAbsences();
+            }
+        )
+        .subscribe();
+}
 
 async function checkPushStatus() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
@@ -544,7 +774,7 @@ async function checkPushStatus() {
     const btn = document.getElementById('push-btn');
     const status = document.getElementById('push-status');
     
-    if (subscription) {
+    if (subscription && btn && status) {
         btn.textContent = 'Notifiche Attive ✓';
         btn.style.background = '#10b981';
         btn.disabled = true;
@@ -566,17 +796,25 @@ async function subscribeToPush() {
 
     try {
         if (!('serviceWorker' in navigator)) throw new Error('Service Worker non supportato');
+
+        if ('Notification' in window && Notification.permission === 'default') {
+            await Notification.requestPermission();
+        }
         
+        await navigator.serviceWorker.register('./sw.js');
         const registration = await navigator.serviceWorker.ready;
         
-        const subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
-        });
+        let subscription = await registration.pushManager.getSubscription();
+        if (!subscription) {
+            subscription = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID_KEY)
+            });
+        }
 
         // Save to Supabase
         const { error } = await supabaseClient.from('push_subscriptions').insert([{
-            azienda_id: currentProfile.azienda_id,
+            azienda_id: String(currentProfile.azienda_id),
             nome_dipendente: currentProfile.name,
             subscription: subscription
         }]);
