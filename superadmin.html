@@ -23,6 +23,8 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 12px;
         }
         .header h1 {
             margin: 0;
@@ -45,6 +47,24 @@
             margin: 0;
             color: #64748b;
             font-size: 0.9em;
+        }
+        .subscription-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin-top: 14px;
+        }
+        .subscription-bar input {
+            padding: 7px 10px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 13px;
+            background: white;
         }
         .modules-grid {
             display: grid;
@@ -127,6 +147,7 @@
             margin: 10px 0;
             border: 1px solid #cbd5e1;
             border-radius: 6px;
+            box-sizing: border-box;
         }
         .auth-box button {
             width: 100%;
@@ -138,6 +159,44 @@
             cursor: pointer;
             font-weight: bold;
         }
+        /* Email Modal */
+        .email-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.65);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 16px;
+        }
+        .email-modal-box {
+            background: white;
+            width: 100%;
+            max-width: 540px;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        .email-modal-box label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 4px;
+            margin-top: 12px;
+        }
+        .email-modal-box input,
+        .email-modal-box select,
+        .email-modal-box textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
@@ -147,7 +206,7 @@
         <div class="auth-box">
             <h2>Accesso SuperAdmin</h2>
             <p style="color:#64748b; font-size:14px;">Accedi con il tuo account Supabase</p>
-            <input type="email" id="sa-email" placeholder="Email (es. amministratore@...)">
+            <input type="email" id="sa-email" placeholder="Email (es. info@albergoboschetto.com)">
             <input type="password" id="sa-password" placeholder="Password">
             <button onclick="loginSuperAdmin()">Accedi</button>
             <p id="sa-error" style="color:red; display:none; margin-top:10px;">Credenziali errate</p>
@@ -157,8 +216,15 @@
     <!-- MAIN DASHBOARD -->
     <div class="admin-container" id="admin-dashboard" style="display:none;">
         <div class="header">
-            <h1>SaaS Turni - Gestione Moduli Aziende</h1>
-            <button onclick="logout()" style="padding:8px 16px; background:#ef4444; color:white; border:none; border-radius:6px; cursor:pointer;">Esci</button>
+            <div>
+                <h1>SaaS Turni - Gestione Aziende & Abbonamenti</h1>
+                <p style="margin:4px 0 0 0; color:#64748b; font-size:13px;">Configura moduli, scadenze abbonamento e invia email ai clienti tramite il tuo server SMTP</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+                <button onclick="openEmailModal()" style="padding:10px 16px; background:#3b82f6; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:600;">✉️ Invia Email / Test</button>
+                <a href="index.html" style="padding:10px 16px; background:#e2e8f0; color:#1e293b; text-decoration:none; border-radius:8px; font-weight:600; font-size:14px;">🏠 Dashboard Turni</a>
+                <button onclick="logout()" style="padding:10px 16px; background:#ef4444; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:600;">Esci</button>
+            </div>
         </div>
         
         <div id="aziende-list">
@@ -166,7 +232,41 @@
         </div>
     </div>
 
-    <script type="module" src="js/config.js"></script>
-    <script src="superadmin.js"></script>
+    <!-- MODALE INVIO EMAIL CLIENTI / RINNOVO ABBONAMENTO -->
+    <div id="email-modal" class="email-modal-backdrop">
+        <div class="email-modal-box">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <h2 style="margin:0; font-size:18px; color:#1e293b;">📧 Invia Email dal Server</h2>
+                <button onclick="closeEmailModal()" style="background:none; border:none; font-size:22px; cursor:pointer; color:#64748b;">&times;</button>
+            </div>
+            <p style="margin:0 0 12px 0; font-size:13px; color:#64748b;">Puoi inviare a qualsiasi indirizzo email (anche di test) tramite il tuo SMTP Gmail configurato su Oracle.</p>
+
+            <label>Modello Rapido</label>
+            <select id="email-template" onchange="applyEmailTemplate()">
+                <option value="rinnovo">🔄 Avviso Scadenza / Rinnovo Abbonamento</option>
+                <option value="benvenuto">🎉 Benvenuto & Attivazione Servizio</option>
+                <option value="test">🧪 Email Libera / Test Server SMTP</option>
+            </select>
+
+            <label>Destinatario (Email cliente o qualsiasi email di test)</label>
+            <input type="email" id="email-to" placeholder="es. cliente@ristorante.it oppure tua-mail@gmail.com">
+
+            <label>Oggetto</label>
+            <input type="text" id="email-subject" placeholder="Oggetto dell'email">
+
+            <label>Messaggio</label>
+            <textarea id="email-body" rows="7" placeholder="Scrivi il testo dell'email..."></textarea>
+
+            <div id="email-status" style="margin-top:10px; font-size:13px; font-weight:600; min-height:18px;"></div>
+
+            <div style="display:flex; gap:10px; margin-top:16px;">
+                <button id="btn-send-email" onclick="sendCustomEmail()" style="flex:1; padding:12px; background:#10b981; color:white; border:none; border-radius:8px; font-weight:700; cursor:pointer;">🚀 Invia Email Ora</button>
+                <button onclick="closeEmailModal()" style="padding:12px 18px; background:#f1f5f9; color:#334155; border:1px solid #cbd5e1; border-radius:8px; cursor:pointer;">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/config.js?v=7"></script>
+    <script src="superadmin.js?v=7"></script>
 </body>
 </html>
